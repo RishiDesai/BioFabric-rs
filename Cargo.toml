@@ -1,41 +1,27 @@
-[package]
-name = "biofabric"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "Rust implementation of BioFabric network visualization"
 license = "LGPL-2.1"
 repository = "https://github.com/RishiDesai/BioFabric-rs"
-keywords = ["network", "visualization", "graph", "bioinformatics"]
-categories = ["visualization", "science"]
 
-[dependencies]
+[workspace.dependencies]
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Error handling
-thiserror = "1.0"
+thiserror = "2"
 
 # Collections
 indexmap = { version = "2.0", features = ["serde"] }
 
-# Parallelism (for large network processing)
+# Parallelism
 rayon = "1.8"
 
-[dev-dependencies]
 # Testing
 pretty_assertions = "1.4"
 tempfile = "3.8"
-
-[features]
-default = []
-# Enable parallel processing for large networks
-parallel = []
-
-[lib]
-name = "biofabric"
-path = "src/lib.rs"
-
-[[bin]]
-name = "biofabric"
-path = "src/main.rs"
