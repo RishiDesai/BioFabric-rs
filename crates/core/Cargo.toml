@@ -1,0 +1,31 @@
+[package]
+name = "biofabric-core"
+description = "Core library for BioFabric network visualization"
+keywords = ["network", "visualization", "graph", "bioinformatics"]
+categories = ["visualization", "science"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+indexmap.workspace = true
+bytemuck.workspace = true
+image = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+pretty_assertions.workspace = true
+tempfile.workspace = true
+
+[features]
+default = []
+parallel = ["rayon"]
+png_export = ["image"]
+
+[lib]
+name = "biofabric_core"
+path = "src/lib.rs"
