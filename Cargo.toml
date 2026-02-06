@@ -19,6 +19,12 @@ thiserror = "2"
 # Collections
 indexmap = { version = "2.0", features = ["serde"] }
 
+# Safe casting for GPU buffer data
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# Image export (CPU rendering for CLI)
+image = "0.25"
+
 # Parallelism
 rayon = "1.8"
 
