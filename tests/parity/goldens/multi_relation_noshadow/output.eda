@@ -1,7 +1,0 @@
-Link Column
-A (pd) C = 0
-A (pp) B = 1
-A (gi) E = 2
-B (pp) C = 3
-C (pd) D = 4
-D (pp) E = 5
