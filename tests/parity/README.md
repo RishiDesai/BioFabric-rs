@@ -16,8 +16,8 @@ Exact byte-level parity between `biofabric-rs` and the original Java BioFabric.
 
 **Golden generation**: `./tests/parity/generate_goldens.sh` builds BioFabric
 from source inside Docker (Eclipse Temurin JDK 11) and runs each network
-through the default layout pipeline. Outputs are `.noa` (node order), `.eda`
-(link/edge order), and `.bif` (full session XML).
+through the layout pipeline with various configurations. Outputs are `.noa`
+(node order), `.eda` (link/edge order), and `.bif` (full session XML).
 
 **Rust tests**: `cargo test --test parity_tests -- --include-ignored` loads
 the same input, runs the same algorithm, and diffs output against goldens.
@@ -30,17 +30,35 @@ the same input, runs the same algorithm, and diffs output against goldens.
 | `output.eda` | `Link Column\nname (rel) name = col\n...` | Edge layout algorithm, shadow link placement |
 | `output.bif` | Full XML session | Everything: colors, drain zones, column ranges, annotations |
 
-## Current test networks (13)
+## Test dimensions (124 test functions)
 
-### SIF (8 files)
+| Phase | What | Config | Tests | Functions |
+|-------|------|--------|-------|-----------|
+| P1 | Default layout, shadows ON | baseline | 17 | 51 (×3 formats) |
+| P2 | Default layout, shadows OFF | `--no-shadows` | 17 | 51 (×3 formats) |
+| P3 | Link grouping | `--link-groups` + `--group-mode` | 4 | 12 (×3 formats) |
+| P4 | XML round-trip | load `.bif` → re-export | 10 | 10 (BIF only) |
+| **Total** | | | **48** | **124** |
+
+Each P1/P2/P3 test generates **three** independent test functions (NOA, EDA,
+BIF) so agents can make incremental progress — get parsing right first (NOA
+passes), then edge layout (EDA passes), then full XML export (BIF passes).
+
+## Current test networks (21)
+
+### SIF (12 files)
 
 | File | Nodes | Edges | Why it's here |
 |------|-------|-------|---------------|
+| `single_node.sif` | 1 | 0 | Minimal network — single isolated node, no edges |
+| `single_edge.sif` | 2 | 1 | Minimal connected network — 2 nodes, 1 edge |
 | `triangle.sif` | 3 | 3 | Simplest cycle; baseline sanity check |
 | `self_loop.sif` | 3 | 3 | Feedback edge `A pp A` — no shadow for self-loops |
 | `isolated_nodes.sif` | 6 | 2 | Lone nodes X, Y, Z appended after connected nodes |
 | `disconnected_components.sif` | 11 | 8 | 4 components — validates component ordering in BFS |
 | `multi_relation.sif` | 5 | 6 | 3 relation types (pp, pd, gi) — validates relation-aware edge sorting |
+| `dense_clique.sif` | 6 | 15 | Complete graph K6 — all equal degree, pure tie-breaking test |
+| `linear_chain.sif` | 10 | 9 | Path graph — many degree-2 nodes, chain BFS ordering |
 | `star-500.sif` | 501 | 500 | High-degree hub; stress test for column assignment |
 | `ba2K.sif` | 2000 | ~12K | Power-law network; real-world degree distribution |
 | `BINDhuman.sif` | 19333 | ~39K | Cytoscape protein interaction network; large-scale stress |
@@ -59,12 +77,10 @@ the same input, runs the same algorithm, and diffs output against goldens.
 
 ## What to test: full checklist
 
-### Phase 1: Parsing
+### Phase 1: Parsing + Default Layout (shadows ON)
 
-These validate that loading a file produces the exact same internal network
-representation (same nodes, same links, same relations, same shadow links).
-Checked via `.noa` (correct node set) and `.eda` (correct link set with
-correct shadow/non-shadow classification).
+These validate parsing, node ordering, edge layout, and export — the full
+default pipeline. Each test checks NOA, EDA, and BIF independently.
 
 #### SIF parser (`io::sif`)
 
@@ -76,10 +92,11 @@ correct shadow/non-shadow classification).
 | 4 | Isolated node (1-token line) | Added to lone nodes set | `isolated_nodes.sif` |
 | 5 | Multiple relation types on different edges | Each gets own `AugRelation` | `multi_relation.sif` |
 | 6 | Duplicate edges (same src, rel, trg) | Removed during `preprocessLinks()` | `BINDhuman.sif` has dups |
-| 7 | Empty/blank lines between entries | Silently skipped | All files (add blank lines to test) |
-| 8 | Quoted node names (`"node A"`) | `stripQuotes()` removes outer `"` | **NEEDS NEW NETWORK** |
-| 9 | 2-token line (invalid) | Added to `badLines`, skipped | **NEEDS NEW NETWORK** |
-| 10 | Shadow link creation for every non-feedback edge | `src != trg` → shadow | All networks |
+| 7 | Single isolated node (no edges at all) | Entire network is one lone node | `single_node.sif` |
+| 8 | Minimal connected (2 nodes, 1 edge) | Simplest non-trivial case | `single_edge.sif` |
+| 9 | Dense all-to-all connectivity | Equal degree, pure lexicographic ordering | `dense_clique.sif` |
+| 10 | Path graph (all degree 2 except endpoints) | Chain BFS, extensive tie-breaking | `linear_chain.sif` |
+| 11 | Shadow link creation for every non-feedback edge | `src != trg` → shadow | All networks |
 
 #### GW parser (`io::gw`)
 
@@ -90,16 +107,7 @@ correct shadow/non-shadow classification).
 | 3 | Empty edge labels → `"default"` relation | `stripBrackets()` then fallback | `triangle.gw` |
 | 4 | Named edge labels in brackets `\|{rel}\|` | Bracket stripping | `directed_triangle.gw` |
 | 5 | 1-based node indexing | Parser must subtract/adjust | All GW files |
-| 6 | Lone nodes (declared but no edges) | Added to lone nodes set | Check SANA networks |
-| 7 | Large GW file (18K lines) | Performance, correctness at scale | `yeast.gw` |
-
-#### XML/BIF parser (`io::xml`) — round-trip
-
-| # | Test case | Validated by |
-|---|-----------|-------------|
-| 1 | Load a `.bif` → re-export → byte-identical | Use golden `.bif` as input |
-| 2 | All XML elements preserved (colors, nodes, links, annotations, groups) | Compare re-exported `.bif` |
-| 3 | Character entity mapping (`&`, `<`, `>`, `"`, `'` in names) | **NEEDS NETWORK WITH SPECIAL CHARS** |
+| 6 | Large GW file (18K lines) | Performance, correctness at scale | `yeast.gw` |
 
 ### Phase 2: Default Node Layout
 
@@ -115,6 +123,10 @@ The BFS node ordering algorithm. Tested via `.noa` output.
 | 6 | Self-loop doesn't double-count degree | One link, one shadow (none), degree = 3 for A | `self_loop.sif` |
 | 7 | Hub node always first | Degree 500 >> all others | `star-500.sif` |
 | 8 | Large power-law network | BFS handles many components/nodes | `ba2K.sif` |
+| 9 | Single node (no edges) | Just the one lone node | `single_node.sif` |
+| 10 | Minimal edge (2 nodes) | Higher-degree node first (tie → lexicographic) | `single_edge.sif` |
+| 11 | Dense clique (all same degree) | Pure lexicographic ordering | `dense_clique.sif` |
+| 12 | Long chain (degree-2 interior) | Endpoint vs interior tie-breaking | `linear_chain.sif` |
 
 ### Phase 3: Default Edge Layout
 
@@ -127,9 +139,9 @@ The greedy column assignment algorithm. Tested via `.eda` output.
 | 3 | Self-loop gets column but no shadow column | `A (pp) A = 0`, no `A shdw(pp) A` line | `self_loop.sif` |
 | 4 | Multi-relation: direction→relation→tag ordering | `pd` before `pp` before `gi`? Check actual order | `multi_relation.sif` |
 | 5 | Column numbers are sequential (0, 1, 2, ...) | No gaps in column assignment | All networks |
-| 6 | Shadow column is always assigned | Every link has a shadow column (even non-shadows) | Verified in `.bif` XML |
-| 7 | Non-shadow column only for non-shadow links | Shadow-only links have no `column` attr | Verified in `.bif` XML |
-| 8 | Comparator: undirected < down-directed < up-directed | Within same node pair, direction ordering | `multi_relation.sif` |
+| 6 | Comparator: undirected < down-directed < up-directed | Within same node pair, direction ordering | `multi_relation.sif` |
+| 7 | Single edge: one column, one shadow column | Minimal case | `single_edge.sif` |
+| 8 | Dense clique: 15 edges + 15 shadows = 30 columns | All edges laid out correctly | `dense_clique.sif` |
 
 ### Phase 4: Session XML Export
 
@@ -163,63 +175,50 @@ matches byte-for-byte, everything matches.
 | 6 | EDA body: `src shdw(rel) trg = col` for shadow | Shadow prefix format |
 | 7 | EDA links ordered by column number (ascending) | `TreeMap` iteration on column keys |
 
-### Phase 6: Shadow Link Toggle
+### Phase 6: Shadow Link Toggle (P2 tests)
 
-Same network with shadows ON vs OFF. Requires extending the golden generator
-to support a `--no-shadows` flag (sets `FabricDisplayOptions.setDisplayShadows(false)`).
-
-| # | Test case | Expected behavior |
-|---|-----------|-------------------|
-| 1 | Triangle shadows OFF | `.eda` has 3 lines (no shadow links), `.bif` has different column ranges |
-| 2 | Self-loop shadows OFF | Self-loop still has no shadow regardless |
-| 3 | Star-500 shadows OFF | 500 columns instead of ~1000 |
-
-**Status**: Not yet implemented — needs golden generator extension.
-
-### Phase 7: Link Grouping
-
-Same network with different link grouping configurations. Requires extending
-the golden generator to accept `--link-groups` and `--group-mode` flags.
+Same network with shadows OFF. Validates the `SHADOW_LINK_CHANGE` rebuild.
 
 | # | Test case | Expected behavior |
 |---|-----------|-------------------|
-| 1 | multi_relation PER_NODE_MODE groups=[pp,pd,gi] | Links at each node sorted by group order |
-| 2 | multi_relation PER_NETWORK_MODE groups=[pp,pd,gi] | Global group ordering as primary sort key |
-| 3 | Link group annotations generated | `<linkAnnotations>` section populated |
+| 1 | Single node, shadows OFF | Trivially identical to shadows ON (no edges) |
+| 2 | Single edge, shadows OFF | 1 column instead of 2 |
+| 3 | Triangle, shadows OFF | 3 links, no shadow columns |
+| 4 | Self-loop, shadows OFF | Self-loop has no shadow regardless |
+| 5 | Star-500, shadows OFF | 500 columns instead of ~1000 |
+| 6 | BA-2K, shadows OFF | Large-scale column reduction |
+| 7 | All GW networks, shadows OFF | GW parser + shadow toggle integration |
 
-**Status**: Not yet implemented — needs golden generator extension.
+### Phase 7: Link Grouping (P3 tests)
 
-### Phase 8: Advanced Layouts
+Different link grouping modes. Tests `GROUP_PER_NODE_CHANGE` and
+`GROUP_PER_NETWORK_CHANGE` rebuild paths.
 
-Each layout algorithm gets tested when implemented. Requires extending the
-golden generator to accept `--layout` flags and set up the appropriate
-`BuildData`.
+| # | Test case | Expected behavior |
+|---|-----------|-------------------|
+| 1 | multi_relation PER_NODE groups=[pp,pd,gi] | Links at each node sorted by group order |
+| 2 | multi_relation PER_NETWORK groups=[pp,pd,gi] | Global group ordering as primary sort key |
+| 3 | directed_triangle PER_NODE groups=[activates,inhibits] | GW-based grouping |
+| 4 | directed_triangle PER_NETWORK groups=[activates,inhibits] | GW + global grouping |
 
-| Layout | Networks to test | Notes |
-|--------|-----------------|-------|
-| `NodeSimilarityLayout` | triangle, ba2K | Jaccard similarity ordering |
-| `HierDAGLayout` | **needs DAG network** | Requires DAG structure |
-| `NodeClusterLayout` | **needs cluster file** | Requires attribute file input |
-| `ControlTopLayout` | star-500 | 5 control ordering modes × 4 target modes |
-| `SetLayout` | **needs bipartite network** | Requires bipartite structure |
-| `WorldBankLayout` | star-500 | Hub-spoke grouping |
+### Phase 8: XML Round-Trip (P4 tests)
 
-**Status**: Not yet implemented — advanced layouts are future work.
+Load a golden `.bif` file → re-export → compare against itself.
+Tests the `io::xml` read + write pipeline in isolation.
 
-### Phase 9: Network Alignment
+| # | Test case | What it validates |
+|---|-----------|-------------------|
+| 1 | Small networks (triangle, self_loop, etc.) | Basic XML parsing + serialization |
+| 2 | Medium networks (star-500, RNorvegicus) | Scale handling |
+| 3 | Large networks (ba2K, CElegans) | Performance + correctness at scale |
 
-Alignment-specific features. Requires alignment plugin and `.align` files.
+### Future Phases
 
-| # | Test case |
-|---|-----------|
-| 1 | Merge two networks with alignment mapping |
-| 2 | Node coloring (purple/blue/red classification) |
-| 3 | Edge type classification (7 types) |
-| 4 | Alignment scores (EC, S3, ICS, NC, NGS, LGS, JS) |
-| 5 | Cycle detection |
-| 6 | Orphan edge filtering |
-
-**Status**: Future work — depends on alignment module implementation.
+| Phase | What | Status |
+|-------|------|--------|
+| P9 | Advanced layouts (Similarity, HierDAG, Cluster, ControlTop, Set, WorldBank) | Needs new golden generation + DAG/bipartite networks |
+| P10 | Alignment features (merge, scoring, cycle detection) | Depends on alignment module |
+| P11 | Image export (PNG parity) | Pixel-level comparison |
 
 ---
 
@@ -269,28 +268,60 @@ For each node in row order:
 3. Add a `parity_test!` entry in `crates/core/tests/parity_tests.rs`
 4. Add a `[[test]]` entry in `tests/parity/test_manifest.toml`
 
+For shadow-off variants, also add:
+- A `parity_test_noshadow!` entry in the test file
+- A corresponding `[[test]]` with `shadows = false` in the manifest
+
 ## How to regenerate goldens
 
 ```bash
-./tests/parity/generate_goldens.sh              # all networks (~10s)
-./tests/parity/generate_goldens.sh triangle      # just one
+./tests/parity/generate_goldens.sh              # all variants (~30s)
+./tests/parity/generate_goldens.sh triangle      # just one network (all variants)
 ./tests/parity/generate_goldens.sh --rebuild     # force Docker rebuild
+./tests/parity/generate_goldens.sh --shadows-only    # only shadows-on baseline
+./tests/parity/generate_goldens.sh --no-shadows-only # only shadows-off variants
+./tests/parity/generate_goldens.sh --groups-only     # only link grouping variants
+```
+
+## Running specific test subsets
+
+```bash
+# All tests (124 functions)
+cargo test --test parity_tests -- --include-ignored
+
+# By network
+cargo test --test parity_tests -- --include-ignored triangle
+
+# By format
+cargo test --test parity_tests -- --include-ignored noa
+cargo test --test parity_tests -- --include-ignored eda
+cargo test --test parity_tests -- --include-ignored bif
+
+# By phase
+cargo test --test parity_tests -- --include-ignored noshadow    # P2 tests
+cargo test --test parity_tests -- --include-ignored pernode      # P3 per-node grouping
+cargo test --test parity_tests -- --include-ignored pernetwork   # P3 per-network grouping
+cargo test --test parity_tests -- --include-ignored roundtrip    # P4 XML round-trip
+
+# By format (SIF vs GW)
+cargo test --test parity_tests -- --include-ignored sif_
+cargo test --test parity_tests -- --include-ignored gw_
 ```
 
 ## Implementation priority
 
 | Priority | What | First test to pass |
 |----------|------|--------------------|
-| P0 | SIF parser | `sif_triangle` NOA check |
-| P0 | GW parser | `gw_triangle` NOA check |
-| P1 | DefaultNodeLayout (BFS) | `sif_triangle` NOA parity |
-| P1 | DefaultEdgeLayout (greedy) | `sif_triangle` EDA parity |
-| P2 | NOA/EDA export format | `sif_triangle` NOA + EDA exact match |
-| P3 | XML session writer | `sif_triangle` BIF parity |
+| P0 | SIF parser | `sif_triangle_noa` |
+| P0 | GW parser | `gw_triangle_noa` |
+| P1 | DefaultNodeLayout (BFS) | `sif_triangle_noa` parity |
+| P1 | DefaultEdgeLayout (greedy) | `sif_triangle_eda` parity |
+| P2 | NOA/EDA export format | `sif_triangle_noa` + `sif_triangle_eda` exact match |
+| P3 | XML session writer | `sif_triangle_bif` parity |
 | P3 | Color generator (32-color palette) | Part of BIF parity |
 | P3 | Drain zone computation | Part of BIF parity |
-| P4 | XML session reader (round-trip) | Load `.bif` → re-export → identical |
-| P5 | Shadow toggle | Needs golden generator extension |
-| P5 | Link grouping | Needs golden generator extension |
-| P6 | Advanced layouts | Per-algorithm implementation |
-| P7 | Alignment features | Depends on alignment module |
+| P4 | Shadow toggle (SHADOW_LINK_CHANGE) | `sif_triangle_noshadow_eda` parity |
+| P5 | Link grouping (GROUP_PER_NODE/NETWORK) | `sif_multi_relation_pernode_eda` parity |
+| P6 | XML session reader (round-trip) | `roundtrip_sif_triangle_bif` parity |
+| P7 | Advanced layouts | Per-algorithm implementation |
+| P8 | Alignment features | Depends on alignment module |

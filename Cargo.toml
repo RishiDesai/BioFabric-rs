@@ -31,3 +31,4 @@ rayon = "1.8"
 # Testing
 pretty_assertions = "1.4"
 tempfile = "3.8"
+paste = "1.0"

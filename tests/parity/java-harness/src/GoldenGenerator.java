@@ -7,9 +7,14 @@
 **   - output.eda  (edge/link order attribute file)
 **   - output.bif  (full session XML)
 **
+** Supports configuration variants for comprehensive parity testing:
+**   --no-shadows         Disable shadow links (triggers SHADOW_LINK_CHANGE rebuild)
+**   --link-groups A,B,C  Set link group order (comma-separated relation names)
+**   --group-mode MODE    Link group mode: "per_node" (default) or "per_network"
+**
 ** Usage:
 **   java -Djava.awt.headless=true -cp <classpath> GoldenGenerator \
-**        <input.sif|input.gw> <output-dir>
+**        <input.sif|input.gw> <output-dir> [flags...]
 **
 ** This replicates the exact same code path as BioFabric's headless mode,
 ** ensuring golden files match real BioFabric output bit-for-bit.
@@ -18,33 +23,70 @@
 import java.io.*;
 import java.util.*;
 
-import org.systemsbiology.biofabric.app.ArgParser;
 import org.systemsbiology.biofabric.app.BioFabricWindow;
 import org.systemsbiology.biofabric.api.io.Indenter;
 import org.systemsbiology.biofabric.api.util.ExceptionHandler;
 import org.systemsbiology.biofabric.cmd.CommandSet;
 import org.systemsbiology.biofabric.cmd.HeadlessOracle;
+import org.systemsbiology.biofabric.io.BuildDataImpl;
 import org.systemsbiology.biofabric.model.BioFabricNetwork;
 import org.systemsbiology.biofabric.plugin.PlugInManager;
+import org.systemsbiology.biofabric.ui.FabricDisplayOptions;
+import org.systemsbiology.biofabric.ui.FabricDisplayOptionsManager;
 import org.systemsbiology.biofabric.ui.display.BioFabricPanel;
 import org.systemsbiology.biofabric.util.ResourceManager;
 
 public class GoldenGenerator {
 
+    // ---- Configuration ----
+
+    private boolean noShadows = false;
+    private List<String> linkGroups = null;
+    private String groupMode = "per_node";
+
     public static void main(String[] argv) {
         if (argv.length < 2) {
-            System.err.println("Usage: GoldenGenerator <input.sif|input.gw> <output-dir>");
+            System.err.println("Usage: GoldenGenerator <input.sif|input.gw> <output-dir> [flags...]");
             System.err.println();
-            System.err.println("Loads a SIF or GW file through BioFabric's default layout");
-            System.err.println("pipeline and writes golden output files for parity testing.");
+            System.err.println("Loads a SIF or GW file through BioFabric's default layout pipeline");
+            System.err.println("and writes golden output files for parity testing.");
+            System.err.println();
+            System.err.println("Flags:");
+            System.err.println("  --no-shadows           Disable shadow links after loading");
+            System.err.println("  --link-groups A,B,C    Set link group order (comma-separated)");
+            System.err.println("  --group-mode MODE      per_node (default) or per_network");
             System.exit(1);
         }
 
         String inputPath = argv[0];
         String outputDir = argv[1];
 
+        GoldenGenerator gen = new GoldenGenerator();
+
+        // Parse flags
+        for (int i = 2; i < argv.length; i++) {
+            switch (argv[i]) {
+                case "--no-shadows":
+                    gen.noShadows = true;
+                    break;
+                case "--link-groups":
+                    if (i + 1 < argv.length) {
+                        gen.linkGroups = Arrays.asList(argv[++i].split(","));
+                    }
+                    break;
+                case "--group-mode":
+                    if (i + 1 < argv.length) {
+                        gen.groupMode = argv[++i];
+                    }
+                    break;
+                default:
+                    System.err.println("Unknown flag: " + argv[i]);
+                    System.exit(1);
+            }
+        }
+
         try {
-            new GoldenGenerator().run(inputPath, outputDir);
+            gen.run(inputPath, outputDir);
         } catch (Exception e) {
             System.err.println("ERROR: " + e.getMessage());
             e.printStackTrace(System.err);
@@ -60,10 +102,11 @@ public class GoldenGenerator {
         }
 
         String lowerName = inputFile.getName().toLowerCase();
-        boolean isGW = lowerName.endsWith(".gw");
+        boolean isGW  = lowerName.endsWith(".gw");
         boolean isSIF = lowerName.endsWith(".sif");
         if (!isGW && !isSIF) {
-            throw new IllegalArgumentException("Unsupported file type (expected .sif or .gw): " + inputFile.getName());
+            throw new IllegalArgumentException(
+                "Unsupported file type (expected .sif or .gw): " + inputFile.getName());
         }
 
         File outDir = new File(outputDir);
@@ -87,7 +130,8 @@ public class GoldenGenerator {
 
         // ---- 2. Load network file (triggers default layout) ----
 
-        System.out.println("Loading: " + inputFile.getName() + " (" + (isGW ? "GW" : "SIF") + ")");
+        String fmt = isGW ? "GW" : "SIF";
+        System.out.println("Loading: " + inputFile.getName() + " (" + fmt + ")");
         boolean loadOk;
 
         if (isSIF) {
@@ -119,6 +163,49 @@ public class GoldenGenerator {
         int linkCountNoShadow = bfn.getLinkCount(false);
         System.out.println("Network: " + nodeCount + " nodes, " +
                            linkCountNoShadow + " links (" + linkCount + " with shadows)");
+
+        // ---- 3a. Apply configuration variants (post-load transforms) ----
+
+        if (noShadows) {
+            System.out.println("Applying --no-shadows: toggling shadow display OFF...");
+
+            // Set display option to no shadows (must be set BEFORE rebuild)
+            FabricDisplayOptionsManager dopmgr = FabricDisplayOptionsManager.getMgr();
+            FabricDisplayOptions dop = dopmgr.getDisplayOptions();
+            FabricDisplayOptions newDop = dop.clone();
+            newDop.setDisplayShadows(false);
+            dopmgr.setDisplayOptionsForIO(newDop);
+
+            // Rebuild network with SHADOW_LINK_CHANGE mode to re-lay out edges
+            BuildDataImpl bd = new BuildDataImpl(bfn, BuildDataImpl.BuildMode.SHADOW_LINK_CHANGE);
+            bfn = new BioFabricNetwork(bd, null);
+
+            System.out.println("  Shadow toggle rebuild complete. Links now: " +
+                               bfn.getLinkCount(false) + " (no shadows)");
+        }
+
+        if (linkGroups != null && !linkGroups.isEmpty()) {
+            BioFabricNetwork.LayoutMode mode;
+            BuildDataImpl.BuildMode bmode;
+
+            if ("per_network".equals(groupMode)) {
+                mode = BioFabricNetwork.LayoutMode.PER_NETWORK_MODE;
+                bmode = BuildDataImpl.BuildMode.GROUP_PER_NETWORK_CHANGE;
+            } else {
+                mode = BioFabricNetwork.LayoutMode.PER_NODE_MODE;
+                bmode = BuildDataImpl.BuildMode.GROUP_PER_NODE_CHANGE;
+            }
+
+            System.out.println("Applying link groups " + linkGroups +
+                               " (mode=" + groupMode + ")...");
+
+            // Create build data with existing network + group configuration
+            BuildDataImpl bd = new BuildDataImpl(bfn, bmode, null);
+            bd.setGroupOrderAndMode(linkGroups, mode, true);
+            bfn = new BioFabricNetwork(bd, null);
+
+            System.out.println("  Link group relayout complete.");
+        }
 
         // ---- 4. Export golden files ----
 

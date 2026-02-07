@@ -19,10 +19,38 @@
 #   shadows     - Whether shadow links are enabled
 #   compare     - List of output files to compare: ["noa", "eda", "bif"]
 #   tags        - Optional tags for filtering
+#
+# Link grouping fields (optional):
+#   link_groups - List of relation names defining group order
+#   group_mode  - "per_node" or "per_network"
 
 # ==========================================================================
-# SIF — Edge-case networks
+#
+#  PHASE 1: Default layout, shadows ON  (baseline)
+#
 # ==========================================================================
+
+# ---------- SIF edge cases ----------
+
+[[test]]
+id = "sif_single_node"
+description = "Single isolated node — minimal network, no edges"
+input = "single_node.sif"
+golden_dir = "single_node_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p1"]
+
+[[test]]
+id = "sif_single_edge"
+description = "Two nodes, one edge — minimal connected network"
+input = "single_edge.sif"
+golden_dir = "single_edge_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p1"]
 
 [[test]]
 id = "sif_triangle"
@@ -32,7 +60,7 @@ golden_dir = "triangle_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case"]
+tags = ["sif", "edge_case", "p1"]
 
 [[test]]
 id = "sif_self_loop"
@@ -42,7 +70,7 @@ golden_dir = "self_loop_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case"]
+tags = ["sif", "edge_case", "p1"]
 
 [[test]]
 id = "sif_isolated_nodes"
@@ -52,7 +80,7 @@ golden_dir = "isolated_nodes_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case"]
+tags = ["sif", "edge_case", "p1"]
 
 [[test]]
 id = "sif_disconnected_components"
@@ -62,7 +90,7 @@ golden_dir = "disconnected_components_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case"]
+tags = ["sif", "edge_case", "p1"]
 
 [[test]]
 id = "sif_multi_relation"
@@ -72,11 +100,29 @@ golden_dir = "multi_relation_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case"]
+tags = ["sif", "edge_case", "p1"]
 
-# ==========================================================================
-# SIF — Real-world / stress
-# ==========================================================================
+[[test]]
+id = "sif_dense_clique"
+description = "Complete graph K6 (6 nodes, 15 edges) — dense all-to-all connectivity"
+input = "dense_clique.sif"
+golden_dir = "dense_clique_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p1"]
+
+[[test]]
+id = "sif_linear_chain"
+description = "Linear chain (10 nodes, 9 edges) — path graph, degree-2 tie-breaking"
+input = "linear_chain.sif"
+golden_dir = "linear_chain_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p1"]
+
+# ---------- SIF stress tests ----------
 
 [[test]]
 id = "sif_star500"
@@ -86,7 +132,7 @@ golden_dir = "star-500_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress"]
+tags = ["sif", "stress", "p1"]
 
 [[test]]
 id = "sif_ba2k"
@@ -96,7 +142,7 @@ golden_dir = "ba2K_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress"]
+tags = ["sif", "stress", "p1"]
 
 [[test]]
 id = "sif_bind_human"
@@ -106,11 +152,9 @@ golden_dir = "BINDhuman_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress"]
+tags = ["sif", "stress", "p1"]
 
-# ==========================================================================
-# GW — Hand-crafted
-# ==========================================================================
+# ---------- GW edge cases ----------
 
 [[test]]
 id = "gw_triangle"
@@ -120,7 +164,7 @@ golden_dir = "triangle_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case"]
+tags = ["gw", "edge_case", "p1"]
 
 [[test]]
 id = "gw_directed_tri"
@@ -130,11 +174,9 @@ golden_dir = "directed_triangle_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case"]
+tags = ["gw", "edge_case", "p1"]
 
-# ==========================================================================
-# GW — Real-world (from SANA/networks/)
-# ==========================================================================
+# ---------- GW stress tests ----------
 
 [[test]]
 id = "gw_rnorvegicus"
@@ -144,7 +186,7 @@ golden_dir = "RNorvegicus_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress"]
+tags = ["gw", "stress", "p1"]
 
 [[test]]
 id = "gw_celegans"
@@ -154,7 +196,7 @@ golden_dir = "CElegans_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress"]
+tags = ["gw", "stress", "p1"]
 
 [[test]]
 id = "gw_yeast"
@@ -164,4 +206,362 @@ golden_dir = "yeast_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress"]
+tags = ["gw", "stress", "p1"]
+
+# ==========================================================================
+#
+#  PHASE 2: Default layout, shadows OFF
+#
+#  Same networks, but with shadow links disabled after initial layout.
+#  Validates SHADOW_LINK_CHANGE rebuild path. Node order (NOA) should be
+#  identical to Phase 1; edge order (EDA) and session XML (BIF) differ.
+#
+# ==========================================================================
+
+# ---------- SIF edge cases (no shadows) ----------
+
+[[test]]
+id = "sif_single_node_noshadow"
+description = "Single node, shadows OFF — trivially identical to shadows ON"
+input = "single_node.sif"
+golden_dir = "single_node_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_single_edge_noshadow"
+description = "Two nodes one edge, shadows OFF — 1 column instead of 2"
+input = "single_edge.sif"
+golden_dir = "single_edge_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_triangle_noshadow"
+description = "Triangle shadows OFF — 3 edges, no shadow columns"
+input = "triangle.sif"
+golden_dir = "triangle_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_self_loop_noshadow"
+description = "Self-loop shadows OFF — self-loop has no shadow regardless"
+input = "self_loop.sif"
+golden_dir = "self_loop_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_isolated_nodes_noshadow"
+description = "Isolated nodes, shadows OFF"
+input = "isolated_nodes.sif"
+golden_dir = "isolated_nodes_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_disconnected_components_noshadow"
+description = "Disconnected components, shadows OFF"
+input = "disconnected_components.sif"
+golden_dir = "disconnected_components_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_multi_relation_noshadow"
+description = "Multi-relation, shadows OFF"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_dense_clique_noshadow"
+description = "Dense clique K6, shadows OFF"
+input = "dense_clique.sif"
+golden_dir = "dense_clique_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "sif_linear_chain_noshadow"
+description = "Linear chain, shadows OFF — tests degree-2 tie-breaking without shadows"
+input = "linear_chain.sif"
+golden_dir = "linear_chain_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case", "p2", "noshadow"]
+
+# ---------- SIF stress (no shadows) ----------
+
+[[test]]
+id = "sif_star500_noshadow"
+description = "Star-500 shadows OFF — 500 columns instead of ~1000"
+input = "star-500.sif"
+golden_dir = "star-500_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress", "p2", "noshadow"]
+
+[[test]]
+id = "sif_ba2k_noshadow"
+description = "BA-2K shadows OFF — large power-law network"
+input = "ba2K.sif"
+golden_dir = "ba2K_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress", "p2", "noshadow"]
+
+[[test]]
+id = "sif_bind_human_noshadow"
+description = "BINDhuman shadows OFF — largest stress test"
+input = "BINDhuman.sif"
+golden_dir = "BINDhuman_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress", "p2", "noshadow"]
+
+# ---------- GW edge cases (no shadows) ----------
+
+[[test]]
+id = "gw_triangle_noshadow"
+description = "GW triangle, shadows OFF"
+input = "triangle.gw"
+golden_dir = "triangle_gw_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "edge_case", "p2", "noshadow"]
+
+[[test]]
+id = "gw_directed_tri_noshadow"
+description = "GW directed triangle, shadows OFF"
+input = "directed_triangle.gw"
+golden_dir = "directed_triangle_gw_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "edge_case", "p2", "noshadow"]
+
+# ---------- GW stress (no shadows) ----------
+
+[[test]]
+id = "gw_rnorvegicus_noshadow"
+description = "R. norvegicus PPI, shadows OFF"
+input = "RNorvegicus.gw"
+golden_dir = "RNorvegicus_gw_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress", "p2", "noshadow"]
+
+[[test]]
+id = "gw_celegans_noshadow"
+description = "C. elegans PPI, shadows OFF"
+input = "CElegans.gw"
+golden_dir = "CElegans_gw_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress", "p2", "noshadow"]
+
+[[test]]
+id = "gw_yeast_noshadow"
+description = "Yeast PPI, shadows OFF"
+input = "yeast.gw"
+golden_dir = "yeast_gw_noshadow"
+layout = "default"
+shadows = false
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress", "p2", "noshadow"]
+
+# ==========================================================================
+#
+#  PHASE 3: Link grouping variants
+#
+#  Tests the link grouping relayout paths (GROUP_PER_NODE_CHANGE and
+#  GROUP_PER_NETWORK_CHANGE). Only applies to multi-relation networks.
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_multi_relation_pernode"
+description = "Multi-relation with PER_NODE link grouping [pp, pd, gi]"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_pernode"
+layout = "default"
+shadows = true
+link_groups = ["pp", "pd", "gi"]
+group_mode = "per_node"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "grouping", "p3"]
+
+[[test]]
+id = "sif_multi_relation_pernetwork"
+description = "Multi-relation with PER_NETWORK link grouping [pp, pd, gi]"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_pernetwork"
+layout = "default"
+shadows = true
+link_groups = ["pp", "pd", "gi"]
+group_mode = "per_network"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "grouping", "p3"]
+
+[[test]]
+id = "gw_directed_tri_pernode"
+description = "Directed triangle with PER_NODE grouping [activates, inhibits]"
+input = "directed_triangle.gw"
+golden_dir = "directed_triangle_gw_pernode"
+layout = "default"
+shadows = true
+link_groups = ["activates", "inhibits"]
+group_mode = "per_node"
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "grouping", "p3"]
+
+[[test]]
+id = "gw_directed_tri_pernetwork"
+description = "Directed triangle with PER_NETWORK grouping [activates, inhibits]"
+input = "directed_triangle.gw"
+golden_dir = "directed_triangle_gw_pernetwork"
+layout = "default"
+shadows = true
+link_groups = ["activates", "inhibits"]
+group_mode = "per_network"
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "grouping", "p3"]
+
+# ==========================================================================
+#
+#  PHASE 4: XML round-trip tests
+#
+#  These are derived from Phase 1 goldens. No separate golden generation
+#  needed — the Rust test loads a golden .bif file, parses it with the
+#  XML session reader, re-exports it, and compares byte-for-byte against
+#  the same golden. Tests the io::xml read + write round-trip path.
+#
+#  Entries here are just metadata for the Rust test harness.
+#
+# ==========================================================================
+
+[[test]]
+id = "roundtrip_sif_triangle"
+description = "XML round-trip: load triangle_default/output.bif → re-export"
+input = "triangle_default/output.bif"
+golden_dir = "triangle_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_self_loop"
+description = "XML round-trip: load self_loop_default/output.bif → re-export"
+input = "self_loop_default/output.bif"
+golden_dir = "self_loop_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_isolated_nodes"
+description = "XML round-trip: load isolated_nodes_default/output.bif → re-export"
+input = "isolated_nodes_default/output.bif"
+golden_dir = "isolated_nodes_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_disconnected"
+description = "XML round-trip: load disconnected_components_default/output.bif → re-export"
+input = "disconnected_components_default/output.bif"
+golden_dir = "disconnected_components_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_multi_relation"
+description = "XML round-trip: load multi_relation_default/output.bif → re-export"
+input = "multi_relation_default/output.bif"
+golden_dir = "multi_relation_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_star500"
+description = "XML round-trip: load star-500_default/output.bif → re-export"
+input = "star-500_default/output.bif"
+golden_dir = "star-500_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_sif_ba2k"
+description = "XML round-trip: load ba2K_default/output.bif → re-export"
+input = "ba2K_default/output.bif"
+golden_dir = "ba2K_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_gw_triangle"
+description = "XML round-trip: load triangle_gw_default/output.bif → re-export"
+input = "triangle_gw_default/output.bif"
+golden_dir = "triangle_gw_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_gw_directed_tri"
+description = "XML round-trip: load directed_triangle_gw_default/output.bif → re-export"
+input = "directed_triangle_gw_default/output.bif"
+golden_dir = "directed_triangle_gw_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
+
+[[test]]
+id = "roundtrip_gw_celegans"
+description = "XML round-trip: load CElegans_gw_default/output.bif → re-export"
+input = "CElegans_gw_default/output.bif"
+golden_dir = "CElegans_gw_default"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "p4"]
