@@ -76,6 +76,7 @@ import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentBuildData;
 import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentPlugIn;
 import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentScorer;
 import org.systemsbiology.biofabric.plugin.core.align.NodeGroupMap;
+import org.systemsbiology.biofabric.analysis.GraphSearcher;
 
 public class GoldenGenerator {
 
@@ -125,6 +126,9 @@ public class GoldenGenerator {
     private Double jaccSimThreshold = null;  // threshold for jaccard_similarity mode
     private boolean alignShadows = true;     // shadows for alignment (cycle view toggle)
 
+    // ---- Analysis mode ----
+    private String analysis = null;          // comma-separated: connected_components,topo_sort,node_degree
+
     public static void main(String[] argv) {
         if (argv.length < 2) {
             System.err.println("Usage: GoldenGenerator <input.sif|input.gw> <output-dir> [flags...]");
@@ -158,6 +162,7 @@ public class GoldenGenerator {
             System.err.println("  --ng-mode MODE         Node group mode: none, node_correctness, jaccard_similarity");
             System.err.println("  --jacc-threshold F     Jaccard similarity threshold (default 0.75)");
             System.err.println("  --no-align-shadows     Disable shadows for alignment (affects cycle view)");
+            System.err.println("  --analysis MODES       Comma-separated: connected_components,topo_sort,node_degree");
             System.exit(1);
         }
 
@@ -280,6 +285,11 @@ public class GoldenGenerator {
                     break;
                 case "--no-align-shadows":
                     gen.alignShadows = false;
+                    break;
+                case "--analysis":
+                    if (i + 1 < argv.length) {
+                        gen.analysis = argv[++i];
+                    }
                     break;
                 default:
                     System.err.println("Unknown flag: " + argv[i]);
@@ -698,6 +708,12 @@ public class GoldenGenerator {
                                bfn.getLinkCount(false) + " links");
         }
 
+        // ---- 3f. Graph analysis (optional) ----
+
+        if (analysis != null) {
+            runAnalysis(inputFile, outDir);
+        }
+
         // ---- 4. Export golden files ----
 
         File noaOutFile = new File(outDir, "output.noa");
@@ -902,5 +918,192 @@ public class GoldenGenerator {
         System.out.println("  Layout applied. Network: " + bfn.getNodeCount() + " nodes, " +
                            bfn.getLinkCount(false) + " links");
         return bfn;
+    }
+
+    /**
+     * Run graph analysis operations on the raw parsed network (before layout).
+     * Writes results to output files in the golden directory.
+     */
+    private void runAnalysis(File inputFile, File outDir) throws Exception {
+        System.out.println("Running graph analysis...");
+
+        // Load raw links independently (not through the layout pipeline)
+        UniqueLabeller idGen = new UniqueLabeller();
+        ArrayList<NetLink> rawLinks = new ArrayList<NetLink>();
+        HashSet<NetNode> loners = new HashSet<NetNode>();
+
+        String lower = inputFile.getName().toLowerCase();
+        if (lower.endsWith(".gw")) {
+            (new GWImportLoader()).importFabric(inputFile, idGen, rawLinks, loners, null, null, null);
+            (new GWImportLoader.GWRelationManager()).process(rawLinks, null, null);
+        } else {
+            (new SIFImportLoader()).importFabric(inputFile, idGen, rawLinks, loners, null, null, null);
+        }
+
+        // Build full node set from links + loners
+        BuildExtractor bex = PluginSupportFactory.getBuildExtractor();
+        Set<NetNode> allNodes = bex.extractNodes(rawLinks, loners, null);
+
+        // Preprocess: cull duplicates, keep the reduced set (includes shadows)
+        Set<NetLink> reducedLinks = new HashSet<NetLink>();
+        Set<NetLink> culled = new HashSet<NetLink>();
+        bex.preprocessLinks(rawLinks, reducedLinks, culled, null);
+
+        Set<String> modes = new HashSet<String>(Arrays.asList(analysis.split(",")));
+
+        // ---- Connected components ----
+        if (modes.contains("connected_components")) {
+            System.out.println("  Computing connected components...");
+            // BFS-based component detection using GraphSearcher
+            Set<NetNode> remaining = new HashSet<NetNode>(allNodes);
+            List<List<String>> components = new ArrayList<List<String>>();
+
+            while (!remaining.isEmpty()) {
+                // Pick a start node (deterministic: alphabetically first)
+                NetNode start = null;
+                for (NetNode n : remaining) {
+                    if (start == null || n.getName().compareTo(start.getName()) < 0) {
+                        start = n;
+                    }
+                }
+
+                // BFS from start, following both directions of all links
+                Set<NetNode> component = new HashSet<NetNode>();
+                List<NetNode> queue = new ArrayList<NetNode>();
+                queue.add(start);
+                component.add(start);
+
+                while (!queue.isEmpty()) {
+                    NetNode curr = queue.remove(0);
+                    for (NetLink link : reducedLinks) {
+                        NetNode other = null;
+                        if (link.getSrcNode().equals(curr)) {
+                            other = link.getTrgNode();
+                        } else if (link.getTrgNode().equals(curr)) {
+                            other = link.getSrcNode();
+                        }
+                        if (other != null && !component.contains(other)) {
+                            component.add(other);
+                            queue.add(other);
+                        }
+                    }
+                }
+
+                // Collect component node names sorted alphabetically
+                List<String> names = new ArrayList<String>();
+                for (NetNode n : component) {
+                    names.add(n.getName());
+                }
+                Collections.sort(names);
+                components.add(names);
+                remaining.removeAll(component);
+            }
+
+            // Sort components: by size descending, then by first node name ascending
+            Collections.sort(components, new Comparator<List<String>>() {
+                public int compare(List<String> a, List<String> b) {
+                    int sizeDiff = b.size() - a.size();
+                    if (sizeDiff != 0) return sizeDiff;
+                    return a.get(0).compareTo(b.get(0));
+                }
+            });
+
+            File compFile = new File(outDir, "output.components");
+            PrintWriter pw = new PrintWriter(
+                new BufferedWriter(new OutputStreamWriter(new FileOutputStream(compFile), "UTF-8")));
+            for (List<String> comp : components) {
+                StringBuilder sb = new StringBuilder();
+                sb.append(comp.size());
+                for (String name : comp) {
+                    sb.append("\t").append(name);
+                }
+                pw.println(sb.toString());
+            }
+            pw.flush();
+            pw.close();
+            System.out.println("    Wrote: " + compFile.getPath() +
+                               " (" + components.size() + " components)");
+        }
+
+        // ---- Topological sort ----
+        if (modes.contains("topo_sort")) {
+            System.out.println("  Computing topological sort...");
+            // Filter to non-shadow directed links for topo sort
+            Set<NetLink> directedLinks = new HashSet<NetLink>();
+            for (NetLink link : reducedLinks) {
+                if (link.isDirected() && !link.isShadow()) {
+                    directedLinks.add(link);
+                }
+            }
+
+            GraphSearcher gs = new GraphSearcher(allNodes, directedLinks);
+            Map<NetNode, Integer> levels = gs.topoSort(false);
+
+            // Sort by level ascending, then name ascending
+            List<Map.Entry<NetNode, Integer>> entries =
+                new ArrayList<Map.Entry<NetNode, Integer>>(levels.entrySet());
+            Collections.sort(entries, new Comparator<Map.Entry<NetNode, Integer>>() {
+                public int compare(Map.Entry<NetNode, Integer> a, Map.Entry<NetNode, Integer> b) {
+                    int levelDiff = a.getValue().intValue() - b.getValue().intValue();
+                    if (levelDiff != 0) return levelDiff;
+                    return a.getKey().getName().compareTo(b.getKey().getName());
+                }
+            });
+
+            File topoFile = new File(outDir, "output.toposort");
+            PrintWriter pw = new PrintWriter(
+                new BufferedWriter(new OutputStreamWriter(new FileOutputStream(topoFile), "UTF-8")));
+            for (Map.Entry<NetNode, Integer> e : entries) {
+                pw.println(e.getKey().getName() + "\t" + e.getValue());
+            }
+            pw.flush();
+            pw.close();
+            System.out.println("    Wrote: " + topoFile.getPath() +
+                               " (" + entries.size() + " nodes assigned)");
+
+            // Warn if some nodes were not assigned (indicates incomplete sort)
+            if (entries.size() < allNodes.size()) {
+                System.out.println("    WARNING: " + (allNodes.size() - entries.size()) +
+                                   " nodes were NOT assigned a topological level!");
+            }
+        }
+
+        // ---- Node degree ----
+        if (modes.contains("node_degree")) {
+            System.out.println("  Computing node degrees...");
+            // Compute degree using the corrected nodeDegree method (relCollapse=false)
+            Map<NetNode, Integer> degrees = GraphSearcher.nodeDegree(false, reducedLinks, null);
+
+            // Also include loner nodes with degree 0
+            for (NetNode loner : loners) {
+                if (!degrees.containsKey(loner)) {
+                    degrees.put(loner, Integer.valueOf(0));
+                }
+            }
+
+            // Sort by degree descending, then name ascending
+            List<Map.Entry<NetNode, Integer>> entries =
+                new ArrayList<Map.Entry<NetNode, Integer>>(degrees.entrySet());
+            Collections.sort(entries, new Comparator<Map.Entry<NetNode, Integer>>() {
+                public int compare(Map.Entry<NetNode, Integer> a, Map.Entry<NetNode, Integer> b) {
+                    int degDiff = b.getValue().intValue() - a.getValue().intValue();
+                    if (degDiff != 0) return degDiff;
+                    return a.getKey().getName().compareTo(b.getKey().getName());
+                }
+            });
+
+            File degFile = new File(outDir, "output.degrees");
+            PrintWriter pw = new PrintWriter(
+                new BufferedWriter(new OutputStreamWriter(new FileOutputStream(degFile), "UTF-8")));
+            for (Map.Entry<NetNode, Integer> e : entries) {
+                pw.println(e.getKey().getName() + "\t" + e.getValue());
+            }
+            pw.flush();
+            pw.close();
+            System.out.println("    Wrote: " + degFile.getPath() +
+                               " (" + entries.size() + " nodes)");
+        }
+
+        System.out.println("  Analysis complete.");
     }
 }

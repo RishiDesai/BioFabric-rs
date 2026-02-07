@@ -32,7 +32,7 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | `output.bif` | Full XML session | Everything: colors, drain zones, columns, annotations, plugin data |
 | `output.scores` | `metric\tvalue` (tab-separated) | Alignment scoring metrics (EC, S3, ICS, NC, NGS, LGS, JS) |
 
-## Test suite overview (334 test functions)
+## Test suite overview (381 test functions)
 
 | Phase | What | Tests | Functions |
 |-------|------|-------|-----------|
@@ -53,10 +53,15 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | P15 | Alignment — toy networks (GROUP view) | 2 | 6 |
 | P16 | Alignment — realistic PPI (GROUP view) | 5 | 15 |
 | P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 12 | 36 |
-| — | Analysis: first-neighbor expansion | — | 7 |
-| — | Analysis: alignment scoring metrics | — | 11 |
+| — | Analysis: cycle detection | — | 7 |
+| — | Analysis: Jaccard similarity | — | 5 |
 | — | Analysis: subnetwork extraction | — | 3 |
-| **Total** | | **119 manifest + 21 analysis** | **301 parity + 33 analysis = 334** |
+| — | Analysis: connected components | — | 11 |
+| — | Analysis: topological sort | — | 3 |
+| — | Analysis: node degree | — | 9 |
+| — | Analysis: first-neighbor expansion | — | 7 |
+| — | Analysis: alignment scoring (all 7 metrics × 5 scenarios) | — | 35 |
+| **Total** | | **121 manifest + 80 analysis** | **301 parity + 80 analysis = 381** |
 
 Each parity test generates **three** independent test functions (NOA, EDA,
 BIF) so agents can make incremental progress — get parsing right first (NOA
@@ -146,20 +151,24 @@ both PerfectNG modes, and the cycle view shadow toggle:
 | `NODE_CORRECTNESS` | 76 groups (split by correctness) | 4 tests |
 | `JACCARD_SIMILARITY` | 76 groups (split by JS threshold) | 1 test (threshold=0.75) |
 
-### Scoring metrics
+### Scoring metrics (35 tests)
 
-7 alignment quality metrics computed via `NetworkAlignmentScorer` and
-exported to `output.scores`:
+All 7 alignment quality metrics are tested across 5 alignment scenarios
+(7 × 5 = 35 test functions in `analysis_tests.rs`):
 
-| Metric | Requires perfect alignment | Tests |
-|--------|---------------------------|-------|
-| EC (Edge Correctness) | No | 4 tests |
-| S3 (Symmetric Substructure Score) | No | 3 tests |
-| ICS (Induced Conserved Structure) | No | 2 tests |
-| NC (Node Correctness) | Yes | 1 test |
-| NGS (Node-Group Similarity) | Yes | Via `output.scores` |
-| LGS (Link-Group Similarity) | Yes | Via `output.scores` |
-| JS (Jaccard Similarity) | Yes | Via `output.scores` |
+| Metric | Requires perfect alignment |
+|--------|---------------------------|
+| EC (Edge Coverage) | No |
+| S3 (Symmetric Substructure Score) | No |
+| ICS (Induced Conserved Structure) | No |
+| NC (Node Correctness) | Yes |
+| NGS (Node-Group Similarity) | Yes |
+| LGS (Link-Group Similarity) | Yes |
+| JS (Jaccard Similarity) | Yes |
+
+Scenarios: `casestudy_iv`, `yeast_sc_perfect`, `yeast_sc_s3_pure`,
+`yeast_sc_importance_pure`, `yeast_sc_s3_050`. Each produces an
+`output.scores` file (tab-separated `metric\tvalue` lines).
 
 The 4 Yeast↔SC variants use the **same two networks** with **different
 alignment files** + `--perfect-align` reference, testing how alignment
@@ -245,6 +254,25 @@ For each node in row order:
 
 ---
 
+## Remaining test surface
+
+Features not yet covered by parity tests (~32 tests / ~68 functions):
+
+| Category | Est. tests | Notes |
+|----------|-----------|-------|
+| Image export (PNG/JPEG/TIFF) | ~6 | Pixel-level comparison; Java AWT may produce platform-dependent output. Needs tolerance-based comparison. |
+| Alignment sub-features | ~4 | Cycle detection in `.align` file mappings; orphan edge filtering as a standalone analysis op. |
+| DefaultLayout custom start nodes | ~3 | `DefaultParams.startNodes` override; needs `--start-nodes` flag in GoldenGenerator. |
+| Algorithm parameter deep-variants | ~15 | ControlTop: `CTRL_INTRA_DEGREE_ONLY`, `CTRL_MEDIAN_TARGET_DEGREE`, `GRAY_CODE`, `NODE_DEGREE_ODOMETER_SOURCE`. NodeCluster: ordering (`LINK_SIZE`/`NODE_SIZE`/`NAME`), placement (`INLINE`/`BETWEEN`). NodeSimilarity: custom pass count, cosine distance, chain length, tolerance. SetLayout: `BOTH_IN_SET`. |
+| Populated annotations | ~2 | All goldens produce empty `<nodeAnnotations>`/`<linkAnnotations>`. Need a BIF with manual annotations. |
+| GZIP session handling | ~2 | Loading/saving `.bif.gz` compressed sessions. |
+
+Not relevant for CLI parity (safe to skip): zoom/navigation/scrolling,
+print/PDF export, plugin system, dialog interaction, tour display,
+background file reading, mouse-over views, browser URL templates.
+
+---
+
 ## How to add a new test
 
 1. Drop the network file into `tests/parity/networks/sif/`, `gw/`, or `align/`
@@ -273,7 +301,7 @@ For each node in row order:
 ## Running specific test subsets
 
 ```bash
-# All tests (334 functions)
+# All tests (381 functions)
 cargo test --test parity_tests -- --include-ignored
 cargo test --test analysis_tests -- --include-ignored
 
@@ -313,6 +341,9 @@ cargo test --test parity_tests -- --include-ignored ng_jacc        # JACCARD_SIM
 cargo test --test analysis_tests -- --include-ignored cycle        # Cycle detection
 cargo test --test analysis_tests -- --include-ignored jaccard      # Jaccard similarity
 cargo test --test analysis_tests -- --include-ignored extract      # Subnetwork extraction
+cargo test --test analysis_tests -- --include-ignored components   # Connected components
+cargo test --test analysis_tests -- --include-ignored toposort     # Topological sort
+cargo test --test analysis_tests -- --include-ignored degree       # Node degree
 cargo test --test analysis_tests -- --include-ignored first_neigh  # First-neighbor expansion
 cargo test --test analysis_tests -- --include-ignored align_score  # Alignment scoring
 
