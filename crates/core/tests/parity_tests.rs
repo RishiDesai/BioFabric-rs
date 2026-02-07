@@ -30,11 +30,15 @@
 //   cargo test --test parity_tests -- noa               # run all NOA tests
 //   cargo test --test parity_tests -- noshadow          # run all shadow-off tests
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use biofabric_core::io;
 use biofabric_core::layout::build_data::LayoutBuildData;
+use biofabric_core::layout::cluster::{
+    ClusterOrder, InterClusterPlacement, NodeClusterEdgeLayout, NodeClusterLayout,
+};
+use biofabric_core::layout::control_top::{ControlOrder, ControlTopLayout, TargetOrder};
 use biofabric_core::layout::default::{DefaultEdgeLayout, DefaultNodeLayout};
 use biofabric_core::layout::hierarchy::HierDAGLayout;
 use biofabric_core::layout::world_bank::WorldBankLayout;
@@ -328,6 +332,94 @@ fn run_world_bank_layout(network: &Network) -> NetworkLayout {
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
 
+/// Run the ControlTop layout with the given control and target ordering modes.
+fn run_control_top_layout(
+    network: &Network,
+    ctrl_mode: ControlOrder,
+    targ_mode: TargetOrder,
+    control_nodes_explicit: Option<&[&str]>,
+) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    // Build the ControlTopLayout
+    let control_nodes: Vec<NodeId> = control_nodes_explicit
+        .map(|names| names.iter().map(|n| NodeId::new(*n)).collect())
+        .unwrap_or_default();
+
+    let node_layout = ControlTopLayout::new(control_nodes)
+        .with_control_order(ctrl_mode)
+        .with_target_order(targ_mode);
+
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
+/// Run the NodeCluster layout.
+fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    // Load and parse the attribute file
+    let na_path = parity_root().join("networks").join("na").join(attribute_file);
+    assert!(na_path.exists(), "Attribute file not found: {}", na_path.display());
+    let content = std::fs::read_to_string(&na_path)
+        .unwrap_or_else(|e| panic!("Failed to read attribute file {}: {}", na_path.display(), e));
+
+    let mut assignments: HashMap<NodeId, String> = HashMap::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "ClusterAssignment" || trimmed == "NodeCluster" {
+            continue;
+        }
+        if let Some((name, cluster)) = trimmed.split_once(" = ") {
+            assignments.insert(NodeId::new(name.trim()), cluster.trim().to_string());
+        }
+    }
+
+    let node_layout = NodeClusterLayout::new(assignments.clone())
+        .with_order(ClusterOrder::Name)
+        .with_inter_cluster(InterClusterPlacement::Between);
+
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = NodeClusterEdgeLayout {
+        params: biofabric_core::layout::cluster::ClusterLayoutParams {
+            cluster_order: ClusterOrder::Name,
+            inter_cluster: InterClusterPlacement::Between,
+        },
+        assignments,
+    };
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
+
 /// Parse a NOA-format file ("Node Row" header, "name = row" lines).
 ///
 /// These files use the BioFabric NOA export format:
@@ -479,6 +571,21 @@ fn run_noa_test(cfg: &ParityConfig) {
     } else if cfg.layout == "world_bank" {
         // P10: WorldBank layout
         run_world_bank_layout(&network)
+    } else if cfg.layout == "control_top" {
+        let ctrl_mode = match cfg.control_mode {
+            Some("degree_only") => ControlOrder::DegreeOnly,
+            Some("partial_order") => ControlOrder::PartialOrder,
+            Some("fixed_list") => ControlOrder::FixedList,
+            _ => ControlOrder::DegreeOnly,
+        };
+        let targ_mode = match cfg.target_mode {
+            Some("target_degree") => TargetOrder::TargetDegree,
+            Some("breadth_order") => TargetOrder::BreadthOrder,
+            _ => TargetOrder::TargetDegree,
+        };
+        run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
+    } else if cfg.layout == "node_cluster" {
+        run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
     } else if let Some(noa_file) = cfg.noa_file {
         let noa_path = noa_file_path(noa_file);
         assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
@@ -534,6 +641,21 @@ fn run_eda_test(cfg: &ParityConfig) {
     } else if cfg.layout == "world_bank" {
         // P10: WorldBank layout
         run_world_bank_layout(&network)
+    } else if cfg.layout == "control_top" {
+        let ctrl_mode = match cfg.control_mode {
+            Some("degree_only") => ControlOrder::DegreeOnly,
+            Some("partial_order") => ControlOrder::PartialOrder,
+            Some("fixed_list") => ControlOrder::FixedList,
+            _ => ControlOrder::DegreeOnly,
+        };
+        let targ_mode = match cfg.target_mode {
+            Some("target_degree") => TargetOrder::TargetDegree,
+            Some("breadth_order") => TargetOrder::BreadthOrder,
+            _ => TargetOrder::TargetDegree,
+        };
+        run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
+    } else if cfg.layout == "node_cluster" {
+        run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
     } else if let Some(noa_file) = cfg.noa_file {
         // P11: Fixed node-order import
         let noa_path = noa_file_path(noa_file);
@@ -1345,6 +1467,101 @@ fn generate_goldens() {
             eda_content.lines().count()
         );
         generated += 1;
+    }
+
+    // ---- P8: ControlTop layout ----
+    let controltop_cases: Vec<(&str, &str, &str, &str, Option<&[&str]>)> = vec![
+        ("star-500.sif",       "star-500_controltop_degree_only_target_degree",     "degree_only",   "target_degree",  None),
+        ("star-500.sif",       "star-500_controltop_degree_only_breadth_order",     "degree_only",   "breadth_order",  None),
+        ("star-500.sif",       "star-500_controltop_partial_order_target_degree",   "partial_order", "target_degree",  None),
+        ("star-500.sif",       "star-500_controltop_partial_order_breadth_order",   "partial_order", "breadth_order",  None),
+        ("multi_relation.sif", "multi_relation_controltop_degree_only_target_degree",  "degree_only", "target_degree", None),
+        ("multi_relation.sif", "multi_relation_controltop_degree_only_breadth_order",  "degree_only", "breadth_order", None),
+    ];
+
+    for (input_file, golden_dirname, ctrl_mode_str, targ_mode_str, ctrl_nodes) in &controltop_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (controltop): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let ctrl_mode = match *ctrl_mode_str {
+            "degree_only" => ControlOrder::DegreeOnly,
+            "partial_order" => ControlOrder::PartialOrder,
+            "fixed_list" => ControlOrder::FixedList,
+            _ => ControlOrder::DegreeOnly,
+        };
+        let targ_mode = match *targ_mode_str {
+            "target_degree" => TargetOrder::TargetDegree,
+            "breadth_order" => TargetOrder::BreadthOrder,
+            _ => TargetOrder::TargetDegree,
+        };
+        let layout = run_control_top_layout(&network, ctrl_mode, targ_mode, *ctrl_nodes);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P7: NodeCluster layout ----
+    {
+        let input_file = "multi_relation.sif";
+        let golden_dirname = "multi_relation_node_cluster";
+        let attribute_file = "multi_relation_clusters.na";
+
+        let input_path = network_path(input_file);
+        if input_path.exists() {
+            let golden_path = golden_dir(golden_dirname);
+            let noa_path = golden_path.join("output.noa");
+            if !noa_path.exists() {
+                eprintln!("Generating golden (cluster): {} -> {}", input_file, golden_dirname);
+                let network = load_network(&input_path);
+                let layout = run_node_cluster_layout(&network, attribute_file);
+
+                let noa_content = format_noa(&layout);
+                let eda_content = format_eda(&layout);
+
+                std::fs::create_dir_all(&golden_path).unwrap();
+                std::fs::write(&noa_path, &noa_content).unwrap();
+                std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+                eprintln!(
+                    "  {} : {} NOA lines, {} EDA lines",
+                    golden_dirname,
+                    noa_content.lines().count(),
+                    eda_content.lines().count()
+                );
+                generated += 1;
+            } else {
+                skipped += 1;
+            }
+        } else {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+        }
     }
 
     // ---- P11: Fixed node-order import (3 variants) ----
