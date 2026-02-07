@@ -33,7 +33,7 @@
 
 use super::{ImportStats, ParseError};
 use crate::model::{Link, Network};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 
 /// Parse a SIF file from a path.
@@ -80,27 +80,139 @@ pub fn parse_reader<R: Read>(reader: BufReader<R>) -> Result<Network, ParseError
 pub fn parse_reader_with_stats<R: Read>(
     reader: BufReader<R>,
 ) -> Result<(Network, ImportStats), ParseError> {
-    // TODO: Implement SIF parsing
-    //
-    // See Java implementation: org.systemsbiology.biofabric.io.SIFImportLoader
-    //
-    // Algorithm:
-    // 1. Read file line by line
-    // 2. Skip empty lines and comments (lines starting with #)
-    // 3. Split each line by tabs, or spaces if no tabs
-    // 4. If 3 tokens: create link (source, relation, target)
-    //    - Also create shadow link if source != target
-    // 5. If 1 token: add as lone node
-    // 6. If 2 tokens or >3 tokens: record as bad line
-    // 7. Strip quotes from tokens if present
-    //
-    // Key behaviors to match:
-    // - Nodes are deduplicated (same name = same node)
-    // - Shadow links are created for non-feedback edges
-    // - Relations are case-sensitive
-    // - Empty lines are skipped
-    //
-    todo!("Implement SIF parser - see BioFabric/src/org/systemsbiology/biofabric/io/SIFImportLoader.java")
+    let mut stats = ImportStats::new();
+
+    // Case-insensitive node name normalization (like Java's DataUtil.normKey).
+    // Maps uppercase(name) → first-seen original-case name.
+    let mut norm_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let normalize = |name: &str, map: &mut std::collections::HashMap<String, String>| -> String {
+        let norm = name.to_uppercase().replace(' ', "");
+        map.entry(norm).or_insert_with(|| name.to_string()).clone()
+    };
+
+    // Phase 1: Parse all lines, collecting raw (normalized) links and lone nodes.
+    // Links are stored as (source, relation, target) with normalized node names.
+    let mut raw_links: Vec<(String, String, String)> = Vec::new();
+    let mut lone_node_names: Vec<String> = Vec::new();
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+
+        // Skip completely empty lines (after trim)
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Split the ORIGINAL line by tab (not trimmed).
+        // Java: `line.split("\\t")` operates on untrimmed line.
+        // If only 1 token and no tab found, split by space.
+        let tokens: Vec<&str> = if line.contains('\t') {
+            line.split('\t').collect()
+        } else {
+            line.split_whitespace().collect()
+        };
+
+        match tokens.len() {
+            3 => {
+                let source = normalize(strip_quotes(tokens[0]), &mut norm_names);
+                let relation = strip_quotes(tokens[1]).to_string();
+                let target = normalize(strip_quotes(tokens[2]), &mut norm_names);
+                raw_links.push((source, relation, target));
+            }
+            1 => {
+                let name = normalize(strip_quotes(tokens[0]), &mut norm_names);
+                lone_node_names.push(name);
+            }
+            _ => {
+                stats.bad_lines.push(line.to_string());
+            }
+        }
+    }
+
+    // Phase 2: Determine which relations are "directed" (have reverse pairs).
+    // Java's BuildExtractorImpl.extractRelations(): if ANY non-feedback link of a
+    // relation has a reverse counterpart (same relation, swapped src/tgt), that
+    // relation is marked as directed. This affects dedup in preprocessLinks:
+    // - Directed relations: only exact duplicates are culled (reverse pairs kept)
+    // - Undirected relations: reverse pairs are also culled (canonical dedup)
+    let norm_key = |s: &str| -> String { s.to_uppercase().replace(' ', "") };
+
+    let mut directed_relations: std::collections::HashSet<String> = std::collections::HashSet::new();
+    {
+        let mut flip_set: std::collections::HashSet<(String, String, String)> =
+            std::collections::HashSet::new();
+        for (source, relation, target) in &raw_links {
+            let ns = norm_key(source);
+            let nt = norm_key(target);
+            let nr = norm_key(relation);
+            if ns == nt {
+                continue; // Feedback not flippable
+            }
+            let flip_key = (nt.clone(), ns.clone(), nr.clone());
+            if flip_set.contains(&flip_key) {
+                directed_relations.insert(nr);
+            } else {
+                flip_set.insert((ns, nt, nr));
+            }
+        }
+    }
+
+    // Phase 3: Preprocess links with direction-aware dedup.
+    let mut seen_edges: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+    let mut links: Vec<Link> = Vec::new();
+
+    for (source, relation, target) in raw_links {
+        let is_feedback = source == target;
+        let ns = norm_key(&source);
+        let nt = norm_key(&target);
+        let nr = norm_key(&relation);
+        let is_directed = directed_relations.contains(&nr);
+
+        // For undirected non-feedback links, canonical key uses sorted pair.
+        // For directed or feedback links, use directional key (exact match dedup only).
+        let dedup_key = if !is_feedback && !is_directed {
+            let (a, b) = if ns <= nt { (ns, nt) } else { (nt, ns) };
+            (a, b, nr)
+        } else {
+            (ns, nt, nr)
+        };
+
+        if !seen_edges.insert(dedup_key) {
+            stats.duplicate_links += 1;
+            continue;
+        }
+
+        let mut link = Link::new(source.as_str(), target.as_str(), relation.as_str());
+        if is_directed {
+            link.directed = Some(true);
+        }
+        links.push(link.clone());
+        stats.link_count += 1;
+
+        // Add inline shadow if not self-loop
+        if !is_feedback {
+            if let Some(shadow) = link.to_shadow() {
+                links.push(shadow);
+                stats.shadow_link_count += 1;
+            }
+        }
+    }
+
+    // Phase 3: Build the network
+    let mut network = Network::with_capacity(0, links.len());
+    for link in links {
+        network.add_link(link);
+    }
+    for name in &lone_node_names {
+        network.add_lone_node(name.as_str());
+    }
+
+    stats.node_count = network.node_count();
+    stats.lone_node_count = network.lone_nodes().len();
+
+    Ok((network, stats))
 }
 
 /// Parse a SIF string directly.
@@ -149,21 +261,21 @@ pub fn write_writer<W: std::io::Write>(
     network: &Network,
     mut writer: W,
 ) -> Result<(), ParseError> {
-    // TODO: Implement SIF writing
-    //
-    // Algorithm:
-    // 1. For each non-shadow link:
-    //    - Write: "{source}\t{relation}\t{target}\n"
-    // 2. For each lone node:
-    //    - Write: "{node_id}\n"
-    //
-    // Key behaviors:
-    // - Skip shadow links (is_shadow == true)
-    // - Skip duplicate edges (same source, target, relation but reversed)
-    //   for undirected networks
-    // - Lone nodes written at the end as single-token lines
-    //
-    todo!("Implement SIF writer")
+    // Write non-shadow links
+    for link in network.links() {
+        if link.is_shadow {
+            continue;
+        }
+        writeln!(writer, "{}\t{}\t{}", link.source, link.relation, link.target)
+            .map_err(|e| ParseError::Io(e))?;
+    }
+
+    // Write lone nodes
+    for id in network.lone_nodes() {
+        writeln!(writer, "{}", id).map_err(|e| ParseError::Io(e))?;
+    }
+
+    Ok(())
 }
 
 /// Write a network to SIF format as a string.

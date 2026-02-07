@@ -32,6 +32,14 @@
 
 use std::path::PathBuf;
 
+use biofabric_core::io;
+use biofabric_core::layout::build_data::LayoutBuildData;
+use biofabric_core::layout::default::{DefaultEdgeLayout, DefaultNodeLayout};
+use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeLayout};
+use biofabric_core::layout::result::NetworkLayout;
+use biofabric_core::model::Network;
+use biofabric_core::worker::NoopMonitor;
+
 // ---------------------------------------------------------------------------
 // Test infrastructure
 // ---------------------------------------------------------------------------
@@ -183,6 +191,83 @@ struct ParityConfig {
 // Parity test runners (one per output format)
 // ---------------------------------------------------------------------------
 
+/// Load a network from a file based on extension.
+fn load_network(path: &std::path::Path) -> Network {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("sif") => io::sif::parse_file(path).unwrap(),
+        Some("gw") => io::gw::parse_file(path).unwrap(),
+        _ => panic!("Unknown input format: {}", path.display()),
+    }
+}
+
+/// Run default layout and get the NetworkLayout.
+fn run_default_layout(network: &Network) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    let node_layout = DefaultNodeLayout::new();
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
+/// Format a NetworkLayout as NOA string.
+fn format_noa(layout: &NetworkLayout) -> String {
+    let mut out = String::new();
+    out.push_str("Node Row\n");
+
+    // Collect nodes sorted by row
+    let mut nodes: Vec<(&biofabric_core::model::NodeId, &biofabric_core::layout::result::NodeLayout)> =
+        layout.iter_nodes().collect();
+    nodes.sort_by_key(|(_, info)| info.row);
+
+    for (id, info) in nodes {
+        out.push_str(&format!("{} = {}\n", id, info.row));
+    }
+
+    out
+}
+
+/// Format a NetworkLayout as EDA string.
+///
+/// For shadow links, the Rust model stores flipped source/target (from to_shadow()),
+/// but the Java golden files show the ORIGINAL (unflipped) source/target. So for
+/// shadow links we display target as source and source as target.
+fn format_eda(layout: &NetworkLayout) -> String {
+    let mut out = String::new();
+    out.push_str("Link Column\n");
+
+    for ll in layout.iter_links() {
+        if ll.is_shadow {
+            // Shadow links are flipped in Rust model, display original order
+            out.push_str(&format!(
+                "{} shdw({}) {} = {}\n",
+                ll.target, ll.relation, ll.source, ll.column
+            ));
+        } else {
+            out.push_str(&format!(
+                "{} ({}) {} = {}\n",
+                ll.source, ll.relation, ll.target, ll.column
+            ));
+        }
+    }
+
+    out
+}
+
 /// Run a NOA (node order) parity test.
 #[allow(dead_code)]
 fn run_noa_test(cfg: &ParityConfig) {
@@ -199,27 +284,11 @@ fn run_noa_test(cfg: &ParityConfig) {
 
     let golden_noa = read_golden(cfg.golden_dirname, "output.noa");
 
-    // ---- STEP 1: Load the network ----
-    // TODO: Replace with actual biofabric-rs parsing
-    // let network = match input.extension().and_then(|e| e.to_str()) {
-    //     Some("sif") => biofabric_core::io::sif::parse_file(&input).unwrap(),
-    //     Some("gw")  => biofabric_core::io::gw::parse_file(&input).unwrap(),
-    //     Some("bif") => biofabric_core::io::xml::parse_session(&input).unwrap().network,
-    //     _ => panic!("Unknown input format: {}", input.display()),
-    // };
+    let network = load_network(&input);
+    let layout = run_default_layout(&network);
+    let actual_noa = format_noa(&layout);
 
-    // ---- STEP 2: Apply default layout ----
-    // TODO: let layout_result = biofabric_core::layout::default::DefaultLayout::new()
-    //     .layout_nodes(&network);
-
-    // ---- STEP 3: Export NOA ----
-    // TODO: let actual_noa = biofabric_core::io::order::write_noa_string(&layout_result);
-
-    // ---- STEP 4: Compare ----
-    // TODO: assert_parity("NOA", &golden_noa, &actual_noa);
-
-    let _ = golden_noa;
-    eprintln!("  NOA comparison: STUB (implementation pending)");
+    assert_parity("NOA", &golden_noa, &actual_noa);
 }
 
 /// Run an EDA (edge/link order) parity test.
@@ -238,28 +307,11 @@ fn run_eda_test(cfg: &ParityConfig) {
 
     let golden_eda = read_golden(cfg.golden_dirname, "output.eda");
 
-    // ---- STEP 1: Load the network ----
-    // TODO: Same as NOA test
+    let network = load_network(&input);
+    let layout = run_default_layout(&network);
+    let actual_eda = format_eda(&layout);
 
-    // ---- STEP 2: Apply default layout ----
-    // TODO: Same as NOA test
-
-    // ---- STEP 2a: Apply configuration variants ----
-    // if !cfg.shadows {
-    //     TODO: Apply SHADOW_LINK_CHANGE rebuild
-    // }
-    // if let Some(groups) = cfg.link_groups {
-    //     TODO: Apply link group relayout with cfg.group_mode
-    // }
-
-    // ---- STEP 3: Export EDA ----
-    // TODO: let actual_eda = biofabric_core::io::order::write_eda_string(&layout_result);
-
-    // ---- STEP 4: Compare ----
-    // TODO: assert_parity("EDA", &golden_eda, &actual_eda);
-
-    let _ = golden_eda;
-    eprintln!("  EDA comparison: STUB (implementation pending)");
+    assert_parity("EDA", &golden_eda, &actual_eda);
 }
 
 /// Run a BIF (session XML) parity test.

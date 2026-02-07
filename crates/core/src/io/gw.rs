@@ -89,29 +89,154 @@ pub fn parse_reader<R: Read>(reader: BufReader<R>) -> Result<Network, ParseError
 pub fn parse_reader_with_stats<R: Read>(
     reader: BufReader<R>,
 ) -> Result<(Network, ImportStats), ParseError> {
-    // TODO: Implement GW parsing
-    //
-    // See Java implementation: org.systemsbiology.biofabric.io.GWImportLoader
-    //
-    // Algorithm:
-    // 1. Read header line, verify it's "LEDA.GRAPH"
-    // 2. Read node type line (e.g., "string")
-    // 3. Read edge type line (e.g., "short")
-    // 4. Read direction indicator (-1 = directed, -2 = undirected)
-    // 5. Read node count
-    // 6. Read node labels (format: |{label}|)
-    // 7. Read edge count
-    // 8. Read edges (format: source_idx target_idx reversal_idx |{label}|)
-    //    - Indices are 1-based
-    //    - reversal_idx is 0 for no reversal
-    //
-    // Key behaviors to match:
-    // - Node indices in edges are 1-based
-    // - Edge labels become the relation
-    // - Empty labels get a default relation
-    // - Handle both directed and undirected graphs
-    //
-    todo!("Implement GW parser - see BioFabric/src/org/systemsbiology/biofabric/io/GWImportLoader.java")
+    use crate::model::Link;
+
+    let mut stats = ImportStats::new();
+    let mut lines_iter = reader.lines();
+    let mut line_num: usize = 0;
+
+    // Helper to read the next non-empty line
+    let next_line = |lines_iter: &mut std::io::Lines<BufReader<R>>, line_num: &mut usize| -> Result<String, ParseError> {
+        loop {
+            match lines_iter.next() {
+                Some(Ok(line)) => {
+                    *line_num += 1;
+                    let trimmed = line.trim().to_string();
+                    if !trimmed.is_empty() {
+                        return Ok(trimmed);
+                    }
+                }
+                Some(Err(e)) => return Err(ParseError::Io(e)),
+                None => return Err(ParseError::UnexpectedEof),
+            }
+        }
+    };
+
+    // Line 1: header
+    let header = next_line(&mut lines_iter, &mut line_num)?;
+    if header != GW_HEADER {
+        return Err(ParseError::InvalidHeader(format!(
+            "Expected '{}', got '{}'",
+            GW_HEADER, header
+        )));
+    }
+
+    // Line 2: node type (skip)
+    let _node_type = next_line(&mut lines_iter, &mut line_num)?;
+
+    // Line 3: edge type (skip)
+    let _edge_type = next_line(&mut lines_iter, &mut line_num)?;
+
+    // Line 4: direction flag
+    let dir_str = next_line(&mut lines_iter, &mut line_num)?;
+    let dir_flag: i32 = dir_str.parse().map_err(|_| ParseError::InvalidFormat {
+        line: line_num,
+        message: format!("Invalid direction flag: {}", dir_str),
+    })?;
+    let is_directed = dir_flag == -1;
+
+    // Line 5: node count
+    let node_count_str = next_line(&mut lines_iter, &mut line_num)?;
+    let node_count: usize = node_count_str.parse().map_err(|_| ParseError::InvalidFormat {
+        line: line_num,
+        message: format!("Invalid node count: {}", node_count_str),
+    })?;
+
+    // Read N node labels
+    let mut node_labels: Vec<String> = Vec::with_capacity(node_count);
+    for _ in 0..node_count {
+        let label_line = next_line(&mut lines_iter, &mut line_num)?;
+        let label = extract_label(&label_line).unwrap_or("").to_string();
+        node_labels.push(label);
+    }
+
+    // Read edge count
+    let edge_count_str = next_line(&mut lines_iter, &mut line_num)?;
+    let edge_count: usize = edge_count_str.parse().map_err(|_| ParseError::InvalidFormat {
+        line: line_num,
+        message: format!("Invalid edge count: {}", edge_count_str),
+    })?;
+
+    // Track which nodes appear in edges
+    let mut used_nodes = std::collections::HashSet::new();
+    let mut links: Vec<Link> = Vec::new();
+
+    // Read M edges
+    for _ in 0..edge_count {
+        let edge_line = next_line(&mut lines_iter, &mut line_num)?;
+        let tokens: Vec<&str> = edge_line.split_whitespace().collect();
+        if tokens.len() < 4 {
+            stats.bad_lines.push(edge_line);
+            continue;
+        }
+
+        let src_idx: usize = tokens[0].parse().map_err(|_| ParseError::InvalidFormat {
+            line: line_num,
+            message: format!("Invalid source index: {}", tokens[0]),
+        })?;
+        let tgt_idx: usize = tokens[1].parse().map_err(|_| ParseError::InvalidFormat {
+            line: line_num,
+            message: format!("Invalid target index: {}", tokens[1]),
+        })?;
+        // tokens[2] is reversal index (ignore)
+
+        // The label is everything from token[3] onward, joined
+        let label_part = tokens[3..].join(" ");
+        let relation = extract_label(&label_part).unwrap_or("");
+        let relation = if relation.is_empty() { "default" } else { relation };
+
+        // Indices are 1-based
+        if src_idx < 1 || src_idx > node_count || tgt_idx < 1 || tgt_idx > node_count {
+            stats.bad_lines.push(edge_line);
+            continue;
+        }
+
+        let source = &node_labels[src_idx - 1];
+        let target = &node_labels[tgt_idx - 1];
+
+        used_nodes.insert(src_idx - 1);
+        used_nodes.insert(tgt_idx - 1);
+
+        let mut link = Link::new(source.as_str(), target.as_str(), relation);
+        if is_directed {
+            link.directed = Some(true);
+        }
+
+        let is_feedback = link.is_feedback();
+        links.push(link.clone());
+        stats.link_count += 1;
+
+        // Add inline shadow if not self-loop
+        if !is_feedback {
+            if let Some(mut shadow) = link.to_shadow() {
+                if is_directed {
+                    shadow.directed = Some(true);
+                }
+                links.push(shadow);
+                stats.shadow_link_count += 1;
+            }
+        }
+    }
+
+    // Build the network
+    let mut network = Network::with_capacity(node_count, links.len());
+    for link in links {
+        network.add_link(link);
+    }
+
+    // Add lone nodes (nodes not used in any edge)
+    for (i, label) in node_labels.iter().enumerate() {
+        if !used_nodes.contains(&i) {
+            network.add_lone_node(label.as_str());
+        }
+    }
+
+    network.metadata.is_directed = is_directed;
+
+    stats.node_count = network.node_count();
+    stats.lone_node_count = network.lone_nodes().len();
+
+    Ok((network, stats))
 }
 
 /// Parse a GW string directly.
@@ -147,33 +272,45 @@ pub fn write_writer<W: std::io::Write>(
     network: &Network,
     mut writer: W,
 ) -> Result<(), ParseError> {
-    // TODO: Implement GW writing
-    //
-    // Format:
-    //   LEDA.GRAPH
-    //   string
-    //   short
-    //   -2                          (or -1 if directed)
-    //   <node_count>
-    //   |{node1_label}|
-    //   |{node2_label}|
-    //   ...
-    //   <edge_count>
-    //   <src_idx> <tgt_idx> 0 |{relation}|
-    //   ...
-    //
-    // Algorithm:
-    // 1. Build node_id -> 1-based index mapping
-    // 2. Write header
-    // 3. Write node labels (including lone nodes)
-    // 4. Write edges (skip shadows, use 1-based indices)
-    //
-    // Key behaviors:
-    // - Node indices are 1-based
-    // - Reversal index is always 0 (we don't track LEDA reversal pointers)
-    // - Skip shadow links
-    //
-    todo!("Implement GW writer")
+    use std::io::Write;
+
+    // Build node_id -> 1-based index mapping
+    let node_ids: Vec<&crate::model::NodeId> = network.node_ids().collect();
+    let node_index: std::collections::HashMap<&crate::model::NodeId, usize> = node_ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (*id, i + 1))
+        .collect();
+
+    let dir_flag = if network.metadata.is_directed { -1 } else { -2 };
+
+    // Header
+    writeln!(writer, "{}", GW_HEADER).map_err(ParseError::Io)?;
+    writeln!(writer, "string").map_err(ParseError::Io)?;
+    writeln!(writer, "short").map_err(ParseError::Io)?;
+    writeln!(writer, "{}", dir_flag).map_err(ParseError::Io)?;
+
+    // Node count and labels
+    writeln!(writer, "{}", node_ids.len()).map_err(ParseError::Io)?;
+    for id in &node_ids {
+        writeln!(writer, "|{{{}}}|", id).map_err(ParseError::Io)?;
+    }
+
+    // Edge count (non-shadow only)
+    let edge_count = network.links().filter(|l| !l.is_shadow).count();
+    writeln!(writer, "{}", edge_count).map_err(ParseError::Io)?;
+
+    for link in network.links() {
+        if link.is_shadow {
+            continue;
+        }
+        let src_idx = node_index[&link.source];
+        let tgt_idx = node_index[&link.target];
+        writeln!(writer, "{} {} 0 |{{{}}}|", src_idx, tgt_idx, link.relation)
+            .map_err(ParseError::Io)?;
+    }
+
+    Ok(())
 }
 
 /// Write a network to GW format as a string.
