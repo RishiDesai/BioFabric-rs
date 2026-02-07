@@ -56,10 +56,26 @@ import org.systemsbiology.biofabric.layouts.NodeSimilarityLayout;
 import org.systemsbiology.biofabric.layouts.SetLayout;
 import org.systemsbiology.biofabric.model.BioFabricNetwork;
 import org.systemsbiology.biofabric.plugin.PlugInManager;
+import org.systemsbiology.biofabric.plugin.PluginSupportFactory;
+import org.systemsbiology.biofabric.plugin.PluginResourceManager;
 import org.systemsbiology.biofabric.ui.FabricDisplayOptions;
 import org.systemsbiology.biofabric.ui.FabricDisplayOptionsManager;
 import org.systemsbiology.biofabric.ui.display.BioFabricPanel;
 import org.systemsbiology.biofabric.util.ResourceManager;
+
+import org.systemsbiology.biofabric.api.model.NetLink;
+import org.systemsbiology.biofabric.api.model.NetNode;
+import org.systemsbiology.biofabric.api.io.BuildExtractor;
+import org.systemsbiology.biofabric.io.FabricImportLoader;
+import org.systemsbiology.biofabric.io.SIFImportLoader;
+import org.systemsbiology.biofabric.io.GWImportLoader;
+import org.systemsbiology.biofabric.ui.FabricColorGenerator;
+import org.systemsbiology.biofabric.plugin.core.align.AlignmentLoader;
+import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignment;
+import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentBuildData;
+import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentPlugIn;
+import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentScorer;
+import org.systemsbiology.biofabric.plugin.core.align.NodeGroupMap;
 
 public class GoldenGenerator {
 
@@ -103,6 +119,11 @@ public class GoldenGenerator {
     // ---- Alignment ----
     private String alignNet2 = null;
     private String alignFile = null;
+    private String perfectAlignFile = null;
+    private String viewType = "group";       // group, orphan, cycle
+    private String ngMode = "none";          // none, node_correctness, jaccard_similarity
+    private Double jaccSimThreshold = null;  // threshold for jaccard_similarity mode
+    private boolean alignShadows = true;     // shadows for alignment (cycle view toggle)
 
     public static void main(String[] argv) {
         if (argv.length < 2) {
@@ -132,6 +153,11 @@ public class GoldenGenerator {
             System.err.println("  --node-lighter F       Display: node lighter level");
             System.err.println("  --link-darker F        Display: link darker level");
             System.err.println("  --align NET2 ALIGN     Alignment: second network + alignment file");
+            System.err.println("  --perfect-align FILE   Perfect alignment for scoring (NC/NGS/LGS/JS)");
+            System.err.println("  --view-type TYPE       Alignment view: group (default), orphan, cycle");
+            System.err.println("  --ng-mode MODE         Node group mode: none, node_correctness, jaccard_similarity");
+            System.err.println("  --jacc-threshold F     Jaccard similarity threshold (default 0.75)");
+            System.err.println("  --no-align-shadows     Disable shadows for alignment (affects cycle view)");
             System.exit(1);
         }
 
@@ -231,6 +257,29 @@ public class GoldenGenerator {
                         gen.alignNet2 = argv[++i];
                         gen.alignFile = argv[++i];
                     }
+                    break;
+                case "--perfect-align":
+                    if (i + 1 < argv.length) {
+                        gen.perfectAlignFile = argv[++i];
+                    }
+                    break;
+                case "--view-type":
+                    if (i + 1 < argv.length) {
+                        gen.viewType = argv[++i];
+                    }
+                    break;
+                case "--ng-mode":
+                    if (i + 1 < argv.length) {
+                        gen.ngMode = argv[++i];
+                    }
+                    break;
+                case "--jacc-threshold":
+                    if (i + 1 < argv.length) {
+                        gen.jaccSimThreshold = Double.valueOf(argv[++i]);
+                    }
+                    break;
+                case "--no-align-shadows":
+                    gen.alignShadows = false;
                     break;
                 default:
                     System.err.println("Unknown flag: " + argv[i]);
@@ -480,6 +529,175 @@ public class GoldenGenerator {
                                bfn.getLinkCount(false) + " links");
         }
 
+        // ---- 3e. Alignment pipeline ----
+
+        NetworkAlignmentPlugIn.NetAlignStats alignScores = null;
+
+        if (alignNet2 != null && alignFile != null) {
+            System.out.println("Running alignment pipeline...");
+
+            File net2File = new File(alignNet2);
+            File alignMapFile = new File(alignFile);
+            if (!net2File.exists()) throw new FileNotFoundException("Net2 not found: " + alignNet2);
+            if (!alignMapFile.exists()) throw new FileNotFoundException("Align file not found: " + alignFile);
+
+            // Load graph 1 (the primary input network already loaded)
+            UniqueLabeller idGen1 = new UniqueLabeller();
+            ArrayList<NetLink> linksG1 = new ArrayList<NetLink>();
+            HashSet<NetNode> lonersG1 = new HashSet<NetNode>();
+            FabricImportLoader.ShadowStats sss1;
+            String net1Lower = inputFile.getName().toLowerCase();
+            if (net1Lower.endsWith(".gw")) {
+                sss1 = (new GWImportLoader()).importFabric(inputFile, idGen1, linksG1, lonersG1, null, null, null);
+                (new GWImportLoader.GWRelationManager()).process(linksG1, null, null);
+            } else {
+                sss1 = (new SIFImportLoader()).importFabric(inputFile, idGen1, linksG1, lonersG1, null, null, null);
+            }
+
+            // Load graph 2
+            UniqueLabeller idGen2 = new UniqueLabeller();
+            ArrayList<NetLink> linksG2 = new ArrayList<NetLink>();
+            HashSet<NetNode> lonersG2 = new HashSet<NetNode>();
+            FabricImportLoader.ShadowStats sss2;
+            String net2Lower = net2File.getName().toLowerCase();
+            if (net2Lower.endsWith(".gw")) {
+                sss2 = (new GWImportLoader()).importFabric(net2File, idGen2, linksG2, lonersG2, null, null, null);
+                (new GWImportLoader.GWRelationManager()).process(linksG2, null, null);
+            } else {
+                sss2 = (new SIFImportLoader()).importFabric(net2File, idGen2, linksG2, lonersG2, null, null, null);
+            }
+
+            System.out.println("  Graph1: " + linksG1.size() + " links, " + lonersG1.size() + " loners");
+            System.out.println("  Graph2: " + linksG2.size() + " links, " + lonersG2.size() + " loners");
+
+            // Read alignment mapping
+            String className = "org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentPlugIn";
+            PluginResourceManager rMan = new PluginResourceManager(className);
+            AlignmentLoader alod = new AlignmentLoader(className, rMan);
+            Map<NetNode, NetNode> mapG1toG2 = new HashMap<NetNode, NetNode>();
+            AlignmentLoader.NetAlignFileStats alignStats = new AlignmentLoader.NetAlignFileStats();
+            alod.readAlignment(alignMapFile, mapG1toG2, alignStats, linksG1, lonersG1, linksG2, lonersG2);
+            System.out.println("  Alignment: " + mapG1toG2.size() + " mapped nodes");
+
+            // Read perfect alignment (if provided, for NC/NGS/LGS/JS scoring)
+            Map<NetNode, NetNode> perfectG1toG2 = null;
+            if (perfectAlignFile != null) {
+                File perfectFile = new File(perfectAlignFile);
+                if (!perfectFile.exists()) throw new FileNotFoundException("Perfect align not found: " + perfectAlignFile);
+                perfectG1toG2 = new HashMap<NetNode, NetNode>();
+                // Need fresh copies of link/loner lists for perfect alignment parsing
+                ArrayList<NetLink> linksG1p = new ArrayList<NetLink>(linksG1);
+                HashSet<NetNode> lonersG1p = new HashSet<NetNode>(lonersG1);
+                ArrayList<NetLink> linksG2p = new ArrayList<NetLink>(linksG2);
+                HashSet<NetNode> lonersG2p = new HashSet<NetNode>(lonersG2);
+                AlignmentLoader.NetAlignFileStats perfectStats = new AlignmentLoader.NetAlignFileStats();
+                alod.readAlignment(perfectFile, perfectG1toG2, perfectStats, linksG1p, lonersG1p, linksG2p, lonersG2p);
+                System.out.println("  Perfect alignment: " + perfectG1toG2.size() + " mapped nodes");
+            }
+
+            // Resolve view type
+            NetworkAlignmentBuildData.ViewType vt;
+            switch (viewType) {
+                case "orphan": vt = NetworkAlignmentBuildData.ViewType.ORPHAN; break;
+                case "cycle":  vt = NetworkAlignmentBuildData.ViewType.CYCLE;  break;
+                default:       vt = NetworkAlignmentBuildData.ViewType.GROUP;  break;
+            }
+            System.out.println("  View type: " + vt);
+
+            // Resolve node group mode
+            NodeGroupMap.PerfectNGMode ngm;
+            switch (ngMode) {
+                case "node_correctness":    ngm = NodeGroupMap.PerfectNGMode.NODE_CORRECTNESS; break;
+                case "jaccard_similarity":  ngm = NodeGroupMap.PerfectNGMode.JACCARD_SIMILARITY; break;
+                default:                    ngm = NodeGroupMap.PerfectNGMode.NONE; break;
+            }
+            Double jaccThresh = (jaccSimThreshold != null) ? jaccSimThreshold : 0.75;
+
+            // Merge the networks
+            UniqueLabeller mergeIdGen = new UniqueLabeller();
+            ArrayList<NetLink> mergedLinks = new ArrayList<NetLink>();
+            Set<NetNode> mergedLoners = new HashSet<NetNode>();
+            Map<NetNode, Boolean> mergedToCorrectNC = new HashMap<NetNode, Boolean>();
+            NetworkAlignment.NodeColorMap nodeColorMap = new NetworkAlignment.NodeColorMap();
+
+            NetworkAlignment na = new NetworkAlignment(
+                mergedLinks, mergedLoners, mapG1toG2, perfectG1toG2,
+                linksG1, lonersG1, linksG2, lonersG2,
+                mergedToCorrectNC, nodeColorMap,
+                vt, mergeIdGen, null);
+            na.mergeNetworks();
+
+            System.out.println("  Merged: " + mergedLinks.size() + " links, " + mergedLoners.size() + " loners");
+
+            // Compute alignment scores
+            // For perfect alignment: also merge the perfect alignment to get its color map
+            Set<NetLink> reducedLinks = new HashSet<NetLink>(mergedLinks);
+            Set<NetNode> reducedLoners = new HashSet<NetNode>(mergedLoners);
+
+            Set<NetLink> reducedLinksPerfect = null;
+            Set<NetNode> reducedLonersPerfect = null;
+            NetworkAlignment.NodeColorMap nodeColorMapPerfect = null;
+
+            if (perfectG1toG2 != null) {
+                ArrayList<NetLink> mergedLinksPerfect = new ArrayList<NetLink>();
+                Set<NetNode> mergedLonersPerfect = new HashSet<NetNode>();
+                Map<NetNode, Boolean> mergedToCorrectNCPerfect = new HashMap<NetNode, Boolean>();
+                nodeColorMapPerfect = new NetworkAlignment.NodeColorMap();
+
+                NetworkAlignment naPerfect = new NetworkAlignment(
+                    mergedLinksPerfect, mergedLonersPerfect, perfectG1toG2, perfectG1toG2,
+                    linksG1, lonersG1, linksG2, lonersG2,
+                    mergedToCorrectNCPerfect, nodeColorMapPerfect,
+                    vt, new UniqueLabeller(), null);
+                naPerfect.mergeNetworks();
+
+                reducedLinksPerfect = new HashSet<NetLink>(mergedLinksPerfect);
+                reducedLonersPerfect = new HashSet<NetNode>(mergedLonersPerfect);
+            }
+
+            NetworkAlignmentScorer scorer = new NetworkAlignmentScorer(
+                reducedLinks, reducedLoners,
+                mergedToCorrectNC, nodeColorMap,
+                nodeColorMapPerfect,
+                reducedLinksPerfect, reducedLonersPerfect,
+                linksG1, lonersG1, linksG2, lonersG2,
+                mapG1toG2, perfectG1toG2, null, rMan);
+            alignScores = scorer.getNetAlignStats();
+
+            System.out.println("  Scores computed: " + alignScores.getMeasures().size() + " metrics");
+            for (NetworkAlignmentPlugIn.NetAlignMeasure m : alignScores.getMeasures()) {
+                System.out.println("    " + m.name + " = " + m.val);
+            }
+
+            // Build the alignment network using NetworkAlignmentBuildData
+            BuildExtractor bex = PluginSupportFactory.getBuildExtractor();
+            Set<NetNode> allSmallerNodes = bex.extractNodes(linksG1, lonersG1, null);
+            Set<NetNode> allLargerNodes = bex.extractNodes(linksG2, lonersG2, null);
+
+            // Determine whether to use node groups (cycle view with shadows off)
+            boolean useNodeGroups = (vt == NetworkAlignmentBuildData.ViewType.CYCLE && !alignShadows);
+
+            NetworkAlignmentBuildData nabd = new NetworkAlignmentBuildData(
+                nodeColorMap, reducedLinksPerfect, reducedLonersPerfect,
+                nodeColorMapPerfect, mergedToCorrectNC,
+                allSmallerNodes, linksG1, lonersG1,
+                allLargerNodes, linksG2, lonersG2,
+                mapG1toG2, perfectG1toG2, alignScores,
+                vt, ngm, jaccThresh, useNodeGroups, alignShadows);
+
+            FabricColorGenerator colGen = new FabricColorGenerator();
+            colGen.newColorModel();
+            nabd.setColorGen(colGen);
+            nabd.setIdGen(mergeIdGen);
+            nabd.setLinks(reducedLinks);
+            nabd.setLoneNodes(reducedLoners);
+
+            bfn = new BioFabricNetwork(nabd, null);
+
+            System.out.println("  Alignment network built: " + bfn.getNodeCount() + " nodes, " +
+                               bfn.getLinkCount(false) + " links");
+        }
+
         // ---- 4. Export golden files ----
 
         File noaOutFile = new File(outDir, "output.noa");
@@ -505,6 +723,19 @@ public class GoldenGenerator {
         bifPw.flush();
         bifPw.close();
         System.out.println("  Wrote: " + bifFile.getPath());
+
+        // Export alignment scores (if computed)
+        if (alignScores != null && alignScores.hasStats()) {
+            File scoresFile = new File(outDir, "output.scores");
+            PrintWriter scoresPw = new PrintWriter(
+                new BufferedWriter(new OutputStreamWriter(new FileOutputStream(scoresFile), "UTF-8")));
+            for (NetworkAlignmentPlugIn.NetAlignMeasure m : alignScores.getMeasures()) {
+                scoresPw.println(m.name + "\t" + String.format("%.10f", m.val));
+            }
+            scoresPw.flush();
+            scoresPw.close();
+            System.out.println("  Wrote: " + scoresFile.getPath());
+        }
 
         System.out.println("Done. Golden files in: " + outDir.getPath());
     }

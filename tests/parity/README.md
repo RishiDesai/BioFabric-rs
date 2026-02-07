@@ -5,220 +5,176 @@ Exact byte-level parity between `biofabric-rs` and the original Java BioFabric.
 ## How it works
 
 ```
-  Input network (.sif/.gw)
+  Input network (.sif/.gw)  ─┐
+  + optional config          │
+  + optional alignment       │
+         ├──► Java BioFabric (Docker) ──► golden .noa, .eda, .bif, .scores
          │
-         ├──► Java BioFabric (Docker) ──► golden .noa, .eda, .bif
-         │
-         └──► biofabric-rs (Rust)     ──► output .noa, .eda, .bif
+         └──► biofabric-rs (Rust)     ──► output .noa, .eda, .bif, .scores
                                                 │
                                           byte-for-byte diff
 ```
 
 **Golden generation**: `./tests/parity/generate_goldens.sh` builds BioFabric
-from source inside Docker (Eclipse Temurin JDK 11) and runs each network
-through the layout pipeline with various configurations. Outputs are `.noa`
-(node order), `.eda` (link/edge order), and `.bif` (full session XML).
+and the AlignmentPlugin from source inside Docker (Eclipse Temurin JDK 11)
+and runs each test case through the layout pipeline. Outputs are `.noa`
+(node order), `.eda` (link/edge order), `.bif` (full session XML), and
+`.scores` (alignment scoring metrics, when applicable).
 
-**Rust tests**: `cargo test --test parity_tests -- --include-ignored` loads
-the same input, runs the same algorithm, and diffs output against goldens.
+**Rust tests**: `cargo test --test parity_tests --test analysis_tests -- --include-ignored`
 
 ## Output formats being compared
 
 | File | Format | What it validates |
 |------|--------|-------------------|
 | `output.noa` | `Node Row\nname = row\n...` | Node ordering algorithm |
-| `output.eda` | `Link Column\nname (rel) name = col\n...` | Edge layout algorithm, shadow link placement |
-| `output.bif` | Full XML session | Everything: colors, drain zones, column ranges, annotations |
+| `output.eda` | `Link Column\nname (rel) name = col\n...` | Edge layout, shadow link placement |
+| `output.bif` | Full XML session | Everything: colors, drain zones, columns, annotations, plugin data |
+| `output.scores` | `metric\tvalue` (tab-separated) | Alignment scoring metrics (EC, S3, ICS, NC, NGS, LGS, JS) |
 
-## Test dimensions (124 test functions)
+## Test suite overview (334 test functions)
 
-| Phase | What | Config | Tests | Functions |
-|-------|------|--------|-------|-----------|
-| P1 | Default layout, shadows ON | baseline | 17 | 51 (×3 formats) |
-| P2 | Default layout, shadows OFF | `--no-shadows` | 17 | 51 (×3 formats) |
-| P3 | Link grouping | `--link-groups` + `--group-mode` | 4 | 12 (×3 formats) |
-| P4 | XML round-trip | load `.bif` → re-export | 10 | 10 (BIF only) |
-| **Total** | | | **48** | **124** |
+| Phase | What | Tests | Functions |
+|-------|------|-------|-----------|
+| P1 | Default layout, shadows ON | 17 | 51 |
+| P2 | Default layout, shadows OFF | 17 | 51 |
+| P3 | Link grouping (PER_NODE + PER_NETWORK) | 4 | 12 |
+| P4 | XML round-trip | 10 | 10 |
+| P5 | NodeSimilarity layout (resort + clustered) | 8 | 24 |
+| P6 | HierDAG layout (pointUp true/false) | 6 | 18 |
+| P7 | NodeCluster layout | 1 | 3 |
+| P8 | ControlTop layout (4 mode combos) | 8 | 24 |
+| P9 | SetLayout (BELONGS_TO + CONTAINS) | 4 | 12 |
+| P10 | WorldBank layout | 2 | 6 |
+| P11 | Fixed-order import (NOA/EDA input) | 4 | 12 |
+| P12 | Subnetwork extraction | 3 | 9 |
+| P13 | Analysis: cycle detection + Jaccard | 10 | 10 |
+| P14 | Display option permutations | 8 | 24 |
+| P15 | Alignment — toy networks (GROUP view) | 2 | 6 |
+| P16 | Alignment — realistic PPI (GROUP view) | 5 | 15 |
+| P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 12 | 36 |
+| — | Analysis: first-neighbor expansion | — | 7 |
+| — | Analysis: alignment scoring metrics | — | 11 |
+| — | Analysis: subnetwork extraction | — | 3 |
+| **Total** | | **119 manifest + 21 analysis** | **301 parity + 33 analysis = 334** |
 
-Each P1/P2/P3 test generates **three** independent test functions (NOA, EDA,
+Each parity test generates **three** independent test functions (NOA, EDA,
 BIF) so agents can make incremental progress — get parsing right first (NOA
 passes), then edge layout (EDA passes), then full XML export (BIF passes).
 
-## Current test networks (21)
+## Test input files (39 files)
 
-### SIF (12 files)
+### SIF networks (20 files)
 
-| File | Nodes | Edges | Why it's here |
-|------|-------|-------|---------------|
-| `single_node.sif` | 1 | 0 | Minimal network — single isolated node, no edges |
-| `single_edge.sif` | 2 | 1 | Minimal connected network — 2 nodes, 1 edge |
-| `triangle.sif` | 3 | 3 | Simplest cycle; baseline sanity check |
-| `self_loop.sif` | 3 | 3 | Feedback edge `A pp A` — no shadow for self-loops |
-| `isolated_nodes.sif` | 6 | 2 | Lone nodes X, Y, Z appended after connected nodes |
-| `disconnected_components.sif` | 11 | 8 | 4 components — validates component ordering in BFS |
-| `multi_relation.sif` | 5 | 6 | 3 relation types (pp, pd, gi) — validates relation-aware edge sorting |
-| `dense_clique.sif` | 6 | 15 | Complete graph K6 — all equal degree, pure tie-breaking test |
-| `linear_chain.sif` | 10 | 9 | Path graph — many degree-2 nodes, chain BFS ordering |
-| `star-500.sif` | 501 | 500 | High-degree hub; stress test for column assignment |
-| `ba2K.sif` | 2000 | ~12K | Power-law network; real-world degree distribution |
-| `BINDhuman.sif` | 19333 | ~39K | Cytoscape protein interaction network; large-scale stress |
+| File | Nodes | Edges | Purpose |
+|------|-------|-------|---------|
+| `single_node.sif` | 1 | 0 | Minimal — single isolated node |
+| `single_edge.sif` | 2 | 1 | Minimal connected network |
+| `triangle.sif` | 3 | 3 | Simplest cycle; baseline |
+| `self_loop.sif` | 3 | 3 | Feedback edge `A pp A` |
+| `isolated_nodes.sif` | 6 | 2 | Lone nodes appended at end |
+| `disconnected_components.sif` | 11 | 8 | 4 components — BFS ordering |
+| `multi_relation.sif` | 5 | 6 | 3 relation types (pp, pd, gi) |
+| `dense_clique.sif` | 6 | 15 | K6 — equal degree tie-breaking |
+| `linear_chain.sif` | 10 | 9 | Path graph — degree-2 ties |
+| `dag_simple.sif` | 5 | 5 | DAG for HierDAG layout |
+| `dag_diamond.sif` | 4 | 4 | Diamond DAG — converging paths |
+| `dag_deep.sif` | 8 | 7 | Linear DAG — many levels |
+| `bipartite.sif` | 6 | 6 | Bipartite graph for SetLayout |
+| `align_net1.sif` | 3 | 3 | Toy alignment network 1 |
+| `align_net2.sif` | 3 | 2 | Toy alignment network 2 |
+| `star-500.sif` | 501 | 500 | Hub stress test |
+| `ba2K.sif` | 2000 | ~12K | Power-law stress test |
+| `BINDhuman.sif` | 19333 | ~39K | Large-scale stress test |
+| `Yeast2KReduced.sif` | ~2.4K | ~16K | Alignment source (DesaiEtAl-2019) |
+| `SC.sif` | ~6.6K | ~77K | Alignment target (DesaiEtAl-2019) |
 
-### GW (5 files)
+### GW networks (7 files)
 
-| File | Nodes | Edges | Why it's here |
-|------|-------|-------|---------------|
-| `triangle.gw` | 3 | 3 | Same topology as triangle.sif; validates GW parser, default relation |
-| `directed_triangle.gw` | 3 | 3 | Directed GW with named relations (activates, inhibits) |
-| `RNorvegicus.gw` | ~1.5K | ~1.5K | Small real PPI network (SANA) |
-| `CElegans.gw` | ~3K | ~5K | Medium real PPI network (SANA) |
-| `yeast.gw` | ~2.4K | ~16K | Large real PPI network (SANA) |
+| File | Nodes | Edges | Purpose |
+|------|-------|-------|---------|
+| `triangle.gw` | 3 | 3 | GW parser, default relation |
+| `directed_triangle.gw` | 3 | 3 | Directed GW, named relations |
+| `RNorvegicus.gw` | ~1.5K | ~1.5K | Small real PPI (SANA) |
+| `CElegans.gw` | ~3K | ~5K | Medium real PPI (SANA) |
+| `yeast.gw` | ~2.4K | ~16K | Large real PPI (SANA) |
+| `CaseStudy-IV-SmallYeast.gw` | 1004 | ~8.3K | Alignment source (DesaiEtAl-2019) |
+| `CaseStudy-IV-LargeYeast.gw` | 1004 | ~10K | Alignment target (DesaiEtAl-2019) |
+
+### Alignment files (7 files)
+
+| File | Mappings | Description |
+|------|----------|-------------|
+| `test_perfect.align` | 3 | Toy: full 1:1 mapping |
+| `test_partial.align` | 2 | Toy: incomplete mapping |
+| `casestudy_iv.align` | 1004 | Case Study IV: SmallYeast ↔ LargeYeast |
+| `yeast_sc_perfect.align` | 2379 | Known ground-truth alignment |
+| `yeast_sc_s3_pure.align` | 2379 | Pure structural objective (S3=1.0) |
+| `yeast_sc_importance_pure.align` | 2379 | Pure biological objective (importance=1.0) |
+| `yeast_sc_s3_050.align` | 2379 | Blended (S3=0.05, importance=0.95) |
+
+### Other input files (5 files)
+
+| File | Format | Purpose |
+|------|--------|---------|
+| `multi_relation_clusters.na` | Node attribute | Cluster assignments for NodeClusterLayout |
+| `triangle_reversed.noa` | Node order | Fixed node ordering (reversed) |
+| `multi_relation_shuffled.noa` | Node order | Fixed node ordering (shuffled) |
+| `ba2K_reversed.noa` | Node order | Fixed node ordering (reversed, large) |
+| `triangle_reversed.eda` | Edge order | Fixed edge ordering (reversed) |
 
 ---
 
-## What to test: full checklist
+## Alignment coverage detail
 
-### Phase 1: Parsing + Default Layout (shadows ON)
+The AlignmentPlugin is tested comprehensively across all 3 view types,
+both PerfectNG modes, and the cycle view shadow toggle:
 
-These validate parsing, node ordering, edge layout, and export — the full
-default pipeline. Each test checks NOA, EDA, and BIF independently.
+### View types
 
-#### SIF parser (`io::sif`)
+| ViewType | What it does | Tests |
+|----------|-------------|-------|
+| `GROUP` | Standard alignment layout with 7 link groups and node color classification | 7 baseline + 4 NG variants |
+| `ORPHAN` | Filters to unaligned edges + 1-hop context (OrphanEdgeLayout) | 3 tests |
+| `CYCLE` | Highlights mis-alignments via cycle/path detection (AlignCycleLayout) | 3 tests (incl. shadows OFF) |
 
-| # | Test case | Edge case | Validated by |
-|---|-----------|-----------|-------------|
-| 1 | Basic tab-delimited 3-token lines | Happy path | `triangle.sif` |
-| 2 | Space-delimited fallback (no tabs) | BINDhuman uses spaces | `BINDhuman.sif` |
-| 3 | Self-loop line (`A pp A`) | No shadow created for feedback | `self_loop.sif` |
-| 4 | Isolated node (1-token line) | Added to lone nodes set | `isolated_nodes.sif` |
-| 5 | Multiple relation types on different edges | Each gets own `AugRelation` | `multi_relation.sif` |
-| 6 | Duplicate edges (same src, rel, trg) | Removed during `preprocessLinks()` | `BINDhuman.sif` has dups |
-| 7 | Single isolated node (no edges at all) | Entire network is one lone node | `single_node.sif` |
-| 8 | Minimal connected (2 nodes, 1 edge) | Simplest non-trivial case | `single_edge.sif` |
-| 9 | Dense all-to-all connectivity | Equal degree, pure lexicographic ordering | `dense_clique.sif` |
-| 10 | Path graph (all degree 2 except endpoints) | Chain BFS, extensive tie-breaking | `linear_chain.sif` |
-| 11 | Shadow link creation for every non-feedback edge | `src != trg` → shadow | All networks |
+### PerfectNG modes
 
-#### GW parser (`io::gw`)
+| Mode | Node groups | Tests |
+|------|-------------|-------|
+| `NONE` | 40 standard groups | All baseline GROUP tests |
+| `NODE_CORRECTNESS` | 76 groups (split by correctness) | 4 tests |
+| `JACCARD_SIMILARITY` | 76 groups (split by JS threshold) | 1 test (threshold=0.75) |
 
-| # | Test case | Edge case | Validated by |
-|---|-----------|-----------|-------------|
-| 1 | Undirected GW (`-2` header) | Default undirected | `triangle.gw` |
-| 2 | Directed GW (`-1` header) | Direction preserved | `directed_triangle.gw` |
-| 3 | Empty edge labels → `"default"` relation | `stripBrackets()` then fallback | `triangle.gw` |
-| 4 | Named edge labels in brackets `\|{rel}\|` | Bracket stripping | `directed_triangle.gw` |
-| 5 | 1-based node indexing | Parser must subtract/adjust | All GW files |
-| 6 | Large GW file (18K lines) | Performance, correctness at scale | `yeast.gw` |
+### Scoring metrics
 
-### Phase 2: Default Node Layout
+7 alignment quality metrics computed via `NetworkAlignmentScorer` and
+exported to `output.scores`:
 
-The BFS node ordering algorithm. Tested via `.noa` output.
+| Metric | Requires perfect alignment | Tests |
+|--------|---------------------------|-------|
+| EC (Edge Correctness) | No | 4 tests |
+| S3 (Symmetric Substructure Score) | No | 3 tests |
+| ICS (Induced Conserved Structure) | No | 2 tests |
+| NC (Node Correctness) | Yes | 1 test |
+| NGS (Node-Group Similarity) | Yes | Via `output.scores` |
+| LGS (Link-Group Similarity) | Yes | Via `output.scores` |
+| JS (Jaccard Similarity) | Yes | Via `output.scores` |
 
-| # | Test case | Expected behavior | Validated by |
-|---|-----------|-------------------|-------------|
-| 1 | Start from highest-degree node | Degree = count of all links (including shadows) | `triangle.sif` (all degree 4) |
-| 2 | Tie-breaking: lexicographic by node name | Within same degree, `TreeSet<NetNode>` ordering | `triangle.sif` → A, B, C |
-| 3 | BFS adds neighbors in degree order | Higher-degree neighbors first | `multi_relation.sif` |
-| 4 | Disconnected components: largest first | Component with highest-degree node goes first | `disconnected_components.sif` |
-| 5 | Isolated nodes appended at end | Sorted lexicographically after all connected nodes | `isolated_nodes.sif` → X, Y, Z at end |
-| 6 | Self-loop doesn't double-count degree | One link, one shadow (none), degree = 3 for A | `self_loop.sif` |
-| 7 | Hub node always first | Degree 500 >> all others | `star-500.sif` |
-| 8 | Large power-law network | BFS handles many components/nodes | `ba2K.sif` |
-| 9 | Single node (no edges) | Just the one lone node | `single_node.sif` |
-| 10 | Minimal edge (2 nodes) | Higher-degree node first (tie → lexicographic) | `single_edge.sif` |
-| 11 | Dense clique (all same degree) | Pure lexicographic ordering | `dense_clique.sif` |
-| 12 | Long chain (degree-2 interior) | Endpoint vs interior tie-breaking | `linear_chain.sif` |
+The 4 Yeast↔SC variants use the **same two networks** with **different
+alignment files** + `--perfect-align` reference, testing how alignment
+quality affects all 7 metrics and the merged network layout.
 
-### Phase 3: Default Edge Layout
+### Alignment data source
 
-The greedy column assignment algorithm. Tested via `.eda` output.
+Realistic alignment test data from:
 
-| # | Test case | Expected behavior | Validated by |
-|---|-----------|-------------------|-------------|
-| 1 | Links to already-placed nodes come first | Process nodes in row order, links to prior rows first | `triangle.sif` |
-| 2 | Shadow links ordered separately | Shadows sorted by bottom-row (not top-row) | `triangle.sif` `.eda` |
-| 3 | Self-loop gets column but no shadow column | `A (pp) A = 0`, no `A shdw(pp) A` line | `self_loop.sif` |
-| 4 | Multi-relation: direction→relation→tag ordering | `pd` before `pp` before `gi`? Check actual order | `multi_relation.sif` |
-| 5 | Column numbers are sequential (0, 1, 2, ...) | No gaps in column assignment | All networks |
-| 6 | Comparator: undirected < down-directed < up-directed | Within same node pair, direction ordering | `multi_relation.sif` |
-| 7 | Single edge: one column, one shadow column | Minimal case | `single_edge.sif` |
-| 8 | Dense clique: 15 edges + 15 shadows = 30 columns | All edges laid out correctly | `dense_clique.sif` |
+> Desai et al. (2019) "Network Alignment Visualization"
+> BMC Bioinformatics. DOI: 10.1186/s12859-019-2878-3
 
-### Phase 4: Session XML Export
-
-The `.bif` file. This is the most comprehensive check — if the `.bif`
-matches byte-for-byte, everything matches.
-
-| # | Test case | What it validates |
-|---|-----------|-------------------|
-| 1 | `<colors>` section: 32-color palette for nodes and links | Exact RGB values, exact color names |
-| 2 | `<displayOptions />` | Default display options output |
-| 3 | `<node>` elements: name, nid, row, minCol, maxCol, minColSha, maxColSha, color | All node layout attributes |
-| 4 | `<drainZones>` and `<drainZonesShadow>` | Drain zone computation correctness |
-| 5 | `<link>` elements: srcID, trgID, rel, directed, shadow, column, shadowCol, srcRow, trgRow, color | All link layout attributes |
-| 6 | Color assignment: `row % 32` for nodes, `shadowCol % 32` for links | Deterministic cycling |
-| 7 | Node ID (`nid`) assignment | Sequential integer IDs from `UniqueLabeller` |
-| 8 | Empty annotations sections | `<nodeAnnotations>`, `<linkAnnotations>`, `<shadowLinkAnnotations>` present but empty |
-| 9 | Empty plugin data | `<plugInDataSets>` present but empty |
-| 10 | XML indentation (2-space indent) | Exact whitespace matching |
-| 11 | Character entity escaping in relation names | `CharacterEntityMapper.mapEntities()` |
-| 12 | Attribute ordering within elements | Must match Java's `PrintWriter` output order exactly |
-
-### Phase 5: NOA/EDA Export Format
-
-| # | Test case | What it validates |
-|---|-----------|-------------------|
-| 1 | NOA header is exactly `Node Row` | First line format |
-| 2 | NOA body: `nodeName = rowNumber` (space-equals-space) | Exact format |
-| 3 | NOA nodes ordered by row number (ascending) | `TreeSet` iteration on row keys |
-| 4 | EDA header is exactly `Link Column` | First line format |
-| 5 | EDA body: `src (rel) trg = col` for non-shadow | `FabricLink.toEOAString()` format |
-| 6 | EDA body: `src shdw(rel) trg = col` for shadow | Shadow prefix format |
-| 7 | EDA links ordered by column number (ascending) | `TreeMap` iteration on column keys |
-
-### Phase 6: Shadow Link Toggle (P2 tests)
-
-Same network with shadows OFF. Validates the `SHADOW_LINK_CHANGE` rebuild.
-
-| # | Test case | Expected behavior |
-|---|-----------|-------------------|
-| 1 | Single node, shadows OFF | Trivially identical to shadows ON (no edges) |
-| 2 | Single edge, shadows OFF | 1 column instead of 2 |
-| 3 | Triangle, shadows OFF | 3 links, no shadow columns |
-| 4 | Self-loop, shadows OFF | Self-loop has no shadow regardless |
-| 5 | Star-500, shadows OFF | 500 columns instead of ~1000 |
-| 6 | BA-2K, shadows OFF | Large-scale column reduction |
-| 7 | All GW networks, shadows OFF | GW parser + shadow toggle integration |
-
-### Phase 7: Link Grouping (P3 tests)
-
-Different link grouping modes. Tests `GROUP_PER_NODE_CHANGE` and
-`GROUP_PER_NETWORK_CHANGE` rebuild paths.
-
-| # | Test case | Expected behavior |
-|---|-----------|-------------------|
-| 1 | multi_relation PER_NODE groups=[pp,pd,gi] | Links at each node sorted by group order |
-| 2 | multi_relation PER_NETWORK groups=[pp,pd,gi] | Global group ordering as primary sort key |
-| 3 | directed_triangle PER_NODE groups=[activates,inhibits] | GW-based grouping |
-| 4 | directed_triangle PER_NETWORK groups=[activates,inhibits] | GW + global grouping |
-
-### Phase 8: XML Round-Trip (P4 tests)
-
-Load a golden `.bif` file → re-export → compare against itself.
-Tests the `io::xml` read + write pipeline in isolation.
-
-| # | Test case | What it validates |
-|---|-----------|-------------------|
-| 1 | Small networks (triangle, self_loop, etc.) | Basic XML parsing + serialization |
-| 2 | Medium networks (star-500, RNorvegicus) | Scale handling |
-| 3 | Large networks (ba2K, CElegans) | Performance + correctness at scale |
-
-### Future Phases
-
-| Phase | What | Status |
-|-------|------|--------|
-| P9 | Advanced layouts (Similarity, HierDAG, Cluster, ControlTop, Set, WorldBank) | Needs new golden generation + DAG/bipartite networks |
-| P10 | Alignment features (merge, scoring, cycle detection) | Depends on alignment module |
-| P11 | Image export (PNG parity) | Pixel-level comparison |
+- **Case Study IV**: SmallYeast ↔ LargeYeast (1004 nodes, GW format)
+- **Case Studies I-III**: Yeast2KReduced ↔ SC (2379/6600 nodes, SIF format)
+  with 4 alignment quality variants (perfect, pure S3, pure importance, blend)
 
 ---
 
@@ -259,35 +215,67 @@ For each node in row order:
 - Non-shadow: contiguous columns at end of node's range where node is top endpoint
 - Shadow: contiguous columns at start of node's shadow range where node is bottom endpoint
 
+### Alignment edge types (link groups)
+
+| Order | Type | Tag | Color |
+|-------|------|-----|-------|
+| 1 | COVERED | `P` | Purple |
+| 2 | INDUCED_GRAPH1 | `pBp` | Blue |
+| 3 | HALF_ORPHAN_GRAPH1 | `pBb` | Blue (cyan) |
+| 4 | FULL_ORPHAN_GRAPH1 | `bBb` | Blue (green) |
+| 5 | INDUCED_GRAPH2 | `pRp` | Red |
+| 6 | HALF_UNALIGNED_GRAPH2 | `pRr` | Red (orange) |
+| 7 | FULL_UNALIGNED_GRAPH2 | `rRr` | Red (yellow) |
+
+### Alignment node colors
+
+- **Purple** (`P`): Aligned G1↔G2 node (merged/combined)
+- **Blue** (`B`): Unaligned G1 node (orphan)
+- **Red** (`R`): Unaligned G2 node
+
+### Alignment scoring formulas
+
+- `EC = covered / (covered + induced_G1)`
+- `S3 = covered / (covered + induced_G1 + induced_G2)`
+- `ICS = covered / (covered + induced_G2)`
+- `NC = correct_nodes / total_aligned_nodes` (requires perfect alignment)
+- `NGS = angular_similarity(node_group_ratios, perfect_node_group_ratios)`
+- `LGS = angular_similarity(link_group_ratios, perfect_link_group_ratios)`
+- `JS = avg(jaccard_similarity(neighborhoods))` (requires perfect alignment)
+
 ---
 
 ## How to add a new test
 
-1. Drop the network file into `tests/parity/networks/sif/` or `gw/`
+1. Drop the network file into `tests/parity/networks/sif/`, `gw/`, or `align/`
 2. Run `./tests/parity/generate_goldens.sh <name>` to generate goldens
-3. Add a `parity_test!` entry in `crates/core/tests/parity_tests.rs`
+3. Add the appropriate `parity_test*!` entry in `crates/core/tests/parity_tests.rs`
 4. Add a `[[test]]` entry in `tests/parity/test_manifest.toml`
-
-For shadow-off variants, also add:
-- A `parity_test_noshadow!` entry in the test file
-- A corresponding `[[test]]` with `shadows = false` in the manifest
 
 ## How to regenerate goldens
 
 ```bash
-./tests/parity/generate_goldens.sh              # all variants (~30s)
-./tests/parity/generate_goldens.sh triangle      # just one network (all variants)
+./tests/parity/generate_goldens.sh              # all variants
+./tests/parity/generate_goldens.sh triangle      # just one network
 ./tests/parity/generate_goldens.sh --rebuild     # force Docker rebuild
-./tests/parity/generate_goldens.sh --shadows-only    # only shadows-on baseline
-./tests/parity/generate_goldens.sh --no-shadows-only # only shadows-off variants
-./tests/parity/generate_goldens.sh --groups-only     # only link grouping variants
+
+# Filter by phase:
+./tests/parity/generate_goldens.sh --shadows-only
+./tests/parity/generate_goldens.sh --no-shadows-only
+./tests/parity/generate_goldens.sh --groups-only
+./tests/parity/generate_goldens.sh --layouts-only
+./tests/parity/generate_goldens.sh --fixed-only
+./tests/parity/generate_goldens.sh --analysis-only
+./tests/parity/generate_goldens.sh --display-only
+./tests/parity/generate_goldens.sh --align-only
 ```
 
 ## Running specific test subsets
 
 ```bash
-# All tests (124 functions)
+# All tests (334 functions)
 cargo test --test parity_tests -- --include-ignored
+cargo test --test analysis_tests -- --include-ignored
 
 # By network
 cargo test --test parity_tests -- --include-ignored triangle
@@ -298,12 +286,37 @@ cargo test --test parity_tests -- --include-ignored eda
 cargo test --test parity_tests -- --include-ignored bif
 
 # By phase
-cargo test --test parity_tests -- --include-ignored noshadow    # P2 tests
-cargo test --test parity_tests -- --include-ignored pernode      # P3 per-node grouping
-cargo test --test parity_tests -- --include-ignored pernetwork   # P3 per-network grouping
-cargo test --test parity_tests -- --include-ignored roundtrip    # P4 XML round-trip
+cargo test --test parity_tests -- --include-ignored noshadow      # P2
+cargo test --test parity_tests -- --include-ignored pernode        # P3
+cargo test --test parity_tests -- --include-ignored pernetwork     # P3
+cargo test --test parity_tests -- --include-ignored roundtrip      # P4
+cargo test --test parity_tests -- --include-ignored similarity     # P5
+cargo test --test parity_tests -- --include-ignored hierdag        # P6
+cargo test --test parity_tests -- --include-ignored cluster        # P7
+cargo test --test parity_tests -- --include-ignored controltop     # P8
+cargo test --test parity_tests -- --include-ignored set_           # P9
+cargo test --test parity_tests -- --include-ignored world_bank     # P10
+cargo test --test parity_tests -- --include-ignored fixed          # P11
+cargo test --test parity_tests -- --include-ignored extract        # P12
+cargo test --test parity_tests -- --include-ignored display        # P14
 
-# By format (SIF vs GW)
+# Alignment subsets
+cargo test --test parity_tests -- --include-ignored align          # All alignment (P15-P17)
+cargo test --test parity_tests -- --include-ignored casestudy      # Case Study IV
+cargo test --test parity_tests -- --include-ignored yeast_sc       # Yeast↔SC (large)
+cargo test --test parity_tests -- --include-ignored orphan         # ORPHAN view
+cargo test --test parity_tests -- --include-ignored cycle          # CYCLE view
+cargo test --test parity_tests -- --include-ignored ng_nc          # NODE_CORRECTNESS
+cargo test --test parity_tests -- --include-ignored ng_jacc        # JACCARD_SIMILARITY
+
+# Analysis tests
+cargo test --test analysis_tests -- --include-ignored cycle        # Cycle detection
+cargo test --test analysis_tests -- --include-ignored jaccard      # Jaccard similarity
+cargo test --test analysis_tests -- --include-ignored extract      # Subnetwork extraction
+cargo test --test analysis_tests -- --include-ignored first_neigh  # First-neighbor expansion
+cargo test --test analysis_tests -- --include-ignored align_score  # Alignment scoring
+
+# By input format
 cargo test --test parity_tests -- --include-ignored sif_
 cargo test --test parity_tests -- --include-ignored gw_
 ```
@@ -317,11 +330,23 @@ cargo test --test parity_tests -- --include-ignored gw_
 | P1 | DefaultNodeLayout (BFS) | `sif_triangle_noa` parity |
 | P1 | DefaultEdgeLayout (greedy) | `sif_triangle_eda` parity |
 | P2 | NOA/EDA export format | `sif_triangle_noa` + `sif_triangle_eda` exact match |
-| P3 | XML session writer | `sif_triangle_bif` parity |
-| P3 | Color generator (32-color palette) | Part of BIF parity |
-| P3 | Drain zone computation | Part of BIF parity |
-| P4 | Shadow toggle (SHADOW_LINK_CHANGE) | `sif_triangle_noshadow_eda` parity |
-| P5 | Link grouping (GROUP_PER_NODE/NETWORK) | `sif_multi_relation_pernode_eda` parity |
-| P6 | XML session reader (round-trip) | `roundtrip_sif_triangle_bif` parity |
-| P7 | Advanced layouts | Per-algorithm implementation |
-| P8 | Alignment features | Depends on alignment module |
+| P3 | XML session writer + colors + drain zones | `sif_triangle_bif` parity |
+| P4 | Shadow toggle (SHADOW_LINK_CHANGE) | `sif_triangle_noshadow_eda` |
+| P5 | Link grouping | `sif_multi_relation_pernode_eda` |
+| P6 | XML session reader (round-trip) | `roundtrip_sif_triangle_bif` |
+| P7 | NodeSimilarityLayout | `sif_triangle_similarity_resort_noa` |
+| P8 | HierDAGLayout | `sif_dag_simple_hierdag_true_noa` |
+| P9 | NodeClusterLayout | `sif_multi_relation_node_cluster_noa` |
+| P10 | ControlTopLayout | `sif_star500_controltop_degree_target_noa` |
+| P11 | SetLayout | `sif_bipartite_set_belongs_to_noa` |
+| P12 | WorldBankLayout | `sif_star500_world_bank_noa` |
+| P13 | Fixed-order import | `sif_triangle_fixed_noa_noa` |
+| P14 | Subnetwork extraction | `sif_triangle_extract_AB_noa` |
+| P15 | Cycle detection + Jaccard + first-neighbors | `cycle_triangle`, `jaccard_triangle_ab` |
+| P16 | Display options | `sif_triangle_drain0_bif` |
+| P17 | Alignment merge (GROUP view) | `align_perfect_noa` |
+| P18 | Alignment scoring (EC/S3/ICS/NC/NGS/LGS/JS) | `align_score_casestudy_iv_ec` |
+| P19 | Alignment ORPHAN view | `align_casestudy_iv_orphan_noa` |
+| P20 | Alignment CYCLE view | `align_casestudy_iv_cycle_noa` |
+| P21 | Alignment PerfectNG modes | `align_yeast_sc_perfect_ng_nc_noa` |
+| P22 | Realistic alignment at scale | `align_yeast_sc_perfect_noa` |

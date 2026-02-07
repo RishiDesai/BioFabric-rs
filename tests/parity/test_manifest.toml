@@ -1303,3 +1303,229 @@ align_net2 = "align_net2.sif"
 align_file = "test_partial.align"
 compare = ["noa", "eda", "bif"]
 tags = ["alignment", "p15"]
+
+# ==========================================================================
+#
+#  PHASE 16: Realistic alignment tests (DesaiEtAl-2019 case study data)
+#
+#  Real PPI networks and alignments from the BioFabric alignment publication.
+#  Tests the alignment pipeline on biologically meaningful data at scale.
+#
+# ==========================================================================
+
+# --- Case Study IV: SmallYeast vs LargeYeast (GW + GW, 1004 nodes each) ---
+
+[[test]]
+id = "align_casestudy_iv"
+description = "Case Study IV: SmallYeast ↔ LargeYeast (1004-node GW networks, 1:1 alignment)"
+input = "CaseStudy-IV-SmallYeast.gw"
+golden_dir = "align_casestudy_iv"
+layout = "alignment"
+shadows = true
+align_net2 = "CaseStudy-IV-LargeYeast.gw"
+align_file = "casestudy_iv.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "p16"]
+
+# --- Case Studies I-III: Yeast2KReduced vs SC (SIF + SIF, 2379-node alignment) ---
+
+[[test]]
+id = "align_yeast_sc_perfect"
+description = "Yeast2KReduced ↔ SC perfect alignment (2379 mapped nodes, known ground truth)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_perfect"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16"]
+
+[[test]]
+id = "align_yeast_sc_s3_pure"
+description = "Yeast2KReduced ↔ SC with pure S3 alignment (structural objective only)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_pure"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_pure.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16"]
+
+[[test]]
+id = "align_yeast_sc_importance_pure"
+description = "Yeast2KReduced ↔ SC with pure importance alignment (biological objective only)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_importance_pure"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_importance_pure.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16"]
+
+[[test]]
+id = "align_yeast_sc_s3_050"
+description = "Yeast2KReduced ↔ SC with blended alignment (S3=0.05, importance=0.95)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_050"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_050.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16"]
+
+# ==========================================================================
+#
+#  PHASE 17: Alignment view type variants
+#
+#  Tests ORPHAN and CYCLE view types, PerfectNG mode variants, and
+#  cycle view shadow toggle.
+#
+# ==========================================================================
+
+# --- ViewType.ORPHAN: shows only unaligned edges + their 1-hop context ---
+
+[[test]]
+id = "align_casestudy_iv_orphan"
+description = "Case Study IV: orphan edge view (unaligned edges only)"
+input = "CaseStudy-IV-SmallYeast.gw"
+golden_dir = "align_casestudy_iv_orphan"
+layout = "alignment"
+shadows = true
+align_net2 = "CaseStudy-IV-LargeYeast.gw"
+align_file = "casestudy_iv.align"
+view_type = "orphan"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "orphan", "p17"]
+
+[[test]]
+id = "align_yeast_sc_perfect_orphan"
+description = "Yeast↔SC perfect alignment: orphan view (should have minimal orphans)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_perfect_orphan"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_perfect.align"
+view_type = "orphan"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "orphan", "realistic", "p17"]
+
+[[test]]
+id = "align_yeast_sc_s3_pure_orphan"
+description = "Yeast↔SC pure S3: orphan view (more orphans than perfect)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_pure_orphan"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_pure.align"
+view_type = "orphan"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "orphan", "realistic", "p17"]
+
+# --- ViewType.CYCLE: highlights incorrect alignments via cycle/path detection ---
+
+[[test]]
+id = "align_casestudy_iv_cycle"
+description = "Case Study IV: cycle view with shadows ON"
+input = "CaseStudy-IV-SmallYeast.gw"
+golden_dir = "align_casestudy_iv_cycle"
+layout = "alignment"
+shadows = true
+align_net2 = "CaseStudy-IV-LargeYeast.gw"
+align_file = "casestudy_iv.align"
+perfect_align = "casestudy_iv.align"
+view_type = "cycle"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "cycle", "p17"]
+
+[[test]]
+id = "align_casestudy_iv_cycle_noshadow"
+description = "Case Study IV: cycle view with shadows OFF (node groups instead)"
+input = "CaseStudy-IV-SmallYeast.gw"
+golden_dir = "align_casestudy_iv_cycle_noshadow"
+layout = "alignment"
+shadows = false
+align_net2 = "CaseStudy-IV-LargeYeast.gw"
+align_file = "casestudy_iv.align"
+perfect_align = "casestudy_iv.align"
+view_type = "cycle"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "cycle", "noshadow", "p17"]
+
+[[test]]
+id = "align_yeast_sc_s3_pure_cycle"
+description = "Yeast↔SC pure S3: cycle view (highlights mis-alignments)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_pure_cycle"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_pure.align"
+perfect_align = "yeast_sc_perfect.align"
+view_type = "cycle"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "cycle", "realistic", "p17"]
+
+# --- PerfectNGMode variants: node group computation modes ---
+
+[[test]]
+id = "align_yeast_sc_perfect_ng_nc"
+description = "Yeast↔SC perfect: NODE_CORRECTNESS node groups (76 groups)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_perfect_ng_nc"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_perfect.align"
+perfect_align = "yeast_sc_perfect.align"
+ng_mode = "node_correctness"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "ng_mode", "realistic", "p17"]
+
+[[test]]
+id = "align_yeast_sc_s3_pure_ng_nc"
+description = "Yeast↔SC pure S3: NODE_CORRECTNESS node groups"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_pure_ng_nc"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_pure.align"
+perfect_align = "yeast_sc_perfect.align"
+ng_mode = "node_correctness"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "ng_mode", "realistic", "p17"]
+
+[[test]]
+id = "align_yeast_sc_perfect_ng_jacc"
+description = "Yeast↔SC perfect: JACCARD_SIMILARITY node groups (threshold=0.75)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_perfect_ng_jacc"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_perfect.align"
+perfect_align = "yeast_sc_perfect.align"
+ng_mode = "jaccard_similarity"
+jacc_threshold = 0.75
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "ng_mode", "realistic", "p17"]
+
+[[test]]
+id = "align_casestudy_iv_ng_nc"
+description = "Case Study IV: NODE_CORRECTNESS node groups"
+input = "CaseStudy-IV-SmallYeast.gw"
+golden_dir = "align_casestudy_iv_ng_nc"
+layout = "alignment"
+shadows = true
+align_net2 = "CaseStudy-IV-LargeYeast.gw"
+align_file = "casestudy_iv.align"
+perfect_align = "casestudy_iv.align"
+ng_mode = "node_correctness"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "ng_mode", "p17"]
