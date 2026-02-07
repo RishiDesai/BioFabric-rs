@@ -1616,6 +1616,135 @@ align_file = "yeast_sc_s3_050.align"
 compare = ["noa", "eda", "bif"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
+# --- Additional DesaiEtAl-2019 Case Study III alignment blends ---
+# These 6 files cover the full S3/importance tradeoff curve from the paper.
+
+[[test]]
+id = "align_yeast_sc_s3_001"
+description = "Yeast2KReduced ↔ SC blended (S3=0.001, importance=0.999)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_001"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_001.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+[[test]]
+id = "align_yeast_sc_s3_003"
+description = "Yeast2KReduced ↔ SC blended (S3=0.003, importance=0.997)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_003"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_003.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+[[test]]
+id = "align_yeast_sc_s3_005"
+description = "Yeast2KReduced ↔ SC blended (S3=0.005, importance=0.995)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_005"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_005.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+[[test]]
+id = "align_yeast_sc_s3_010"
+description = "Yeast2KReduced ↔ SC blended (S3=0.010, importance=0.990)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_010"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_010.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+[[test]]
+id = "align_yeast_sc_s3_030"
+description = "Yeast2KReduced ↔ SC blended (S3=0.030, importance=0.970)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_030"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_030.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+[[test]]
+id = "align_yeast_sc_s3_100"
+description = "Yeast2KReduced ↔ SC blended (S3=0.100, importance=0.900)"
+input = "Yeast2KReduced.sif"
+golden_dir = "align_yeast_sc_s3_100"
+layout = "alignment"
+shadows = true
+align_net2 = "SC.sif"
+align_file = "yeast_sc_s3_100.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
+
+# --- BIF round-trip with populated annotations (DesaiEtAl publication files) ---
+# These BIF files contain populated <nodeAnnotations>, <linkAnnotations>,
+# <shadowLinkAnnotations>, and <plugInDataSets> from the original publication.
+
+[[test]]
+id = "roundtrip_desai_iii_perfect"
+description = "Round-trip: DesaiEtAl Case III Perfect BIF (populated annotations)"
+input = "CaseStudy-III-Perfect.bif"
+golden_dir = "roundtrip_desai_iii_perfect"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "alignment", "annotations", "p16b"]
+
+[[test]]
+id = "roundtrip_desai_iii_all_s3"
+description = "Round-trip: DesaiEtAl Case III All-S3 BIF"
+input = "CaseStudy-III-All-S3.bif"
+golden_dir = "roundtrip_desai_iii_all_s3"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "alignment", "annotations", "p16b"]
+
+[[test]]
+id = "roundtrip_desai_iii_all_importance"
+description = "Round-trip: DesaiEtAl Case III All-Importance BIF"
+input = "CaseStudy-III-All-Importance.bif"
+golden_dir = "roundtrip_desai_iii_all_importance"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "alignment", "annotations", "p16b"]
+
+[[test]]
+id = "roundtrip_desai_iii_p05s3"
+description = "Round-trip: DesaiEtAl Case III S3=0.05 BIF"
+input = "CaseStudy-III-p05S3p95Imp.bif"
+golden_dir = "roundtrip_desai_iii_p05s3"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "alignment", "annotations", "p16b"]
+
+[[test]]
+id = "roundtrip_desai_iv"
+description = "Round-trip: DesaiEtAl Case IV BIF (cycle annotations)"
+input = "CaseStudy-IV.bif"
+golden_dir = "roundtrip_desai_iv"
+layout = "roundtrip"
+shadows = true
+compare = ["bif"]
+tags = ["roundtrip", "alignment", "annotations", "cycle", "p16b"]
+
 # ==========================================================================
 #
 #  PHASE 17: Alignment view type variants

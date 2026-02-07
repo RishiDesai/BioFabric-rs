@@ -1,7 +1,0 @@
-Link Column
-A (default) B = 0
-A (default) C = 1
-A shdw(default) B = 2
-B (default) C = 3
-A shdw(default) C = 4
-B shdw(default) C = 5
