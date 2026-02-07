@@ -32,7 +32,7 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | `output.bif` | Full XML session | Everything: colors, drain zones, columns, annotations, plugin data |
 | `output.scores` | `metric\tvalue` (tab-separated) | Alignment scoring metrics (EC, S3, ICS, NC, NGS, LGS, JS) |
 
-## Test suite overview (381 test functions)
+## Test suite overview (446 test functions)
 
 | Phase | What | Tests | Functions |
 |-------|------|-------|-----------|
@@ -49,10 +49,12 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | P11 | Fixed-order import (NOA/EDA input) | 4 | 12 |
 | P12 | Subnetwork extraction | 3 | 9 |
 | P13 | Analysis: cycle detection + Jaccard | 10 | 10 |
-| P14 | Display option permutations | 8 | 24 |
+| P13b | Analysis: components + topo sort + degree | 22 | 22 |
+| P14 | Display option permutations | 8 | 8 |
 | P15 | Alignment — toy networks (GROUP view) | 2 | 6 |
-| P16 | Alignment — realistic PPI (GROUP view) | 5 | 15 |
-| P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 12 | 36 |
+| P16 | Alignment — realistic PPI (GROUP view) | 11 | 33 |
+| P16b | BIF round-trip: DesaiEtAl pub files (annotations) | 5 | 5 |
+| P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 10 | 30 |
 | — | Analysis: cycle detection | — | 7 |
 | — | Analysis: Jaccard similarity | — | 5 |
 | — | Analysis: subnetwork extraction | — | 3 |
@@ -60,14 +62,14 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | — | Analysis: topological sort | — | 3 |
 | — | Analysis: node degree | — | 9 |
 | — | Analysis: first-neighbor expansion | — | 7 |
-| — | Analysis: alignment scoring (all 7 metrics × 5 scenarios) | — | 35 |
-| **Total** | | **121 manifest + 80 analysis** | **301 parity + 80 analysis = 381** |
+| — | Analysis: alignment scoring (all 7 metrics × 11 scenarios) | — | 77 |
+| **Total** | | **152 manifest + 122 analysis** | **324 parity + 122 analysis = 446** |
 
 Each parity test generates **three** independent test functions (NOA, EDA,
 BIF) so agents can make incremental progress — get parsing right first (NOA
 passes), then edge layout (EDA passes), then full XML export (BIF passes).
 
-## Test input files (39 files)
+## Test input files (56 files)
 
 ### SIF networks (20 files)
 
@@ -106,7 +108,7 @@ passes), then edge layout (EDA passes), then full XML export (BIF passes).
 | `CaseStudy-IV-SmallYeast.gw` | 1004 | ~8.3K | Alignment source (DesaiEtAl-2019) |
 | `CaseStudy-IV-LargeYeast.gw` | 1004 | ~10K | Alignment target (DesaiEtAl-2019) |
 
-### Alignment files (7 files)
+### Alignment files (13 files)
 
 | File | Mappings | Description |
 |------|----------|-------------|
@@ -116,7 +118,29 @@ passes), then edge layout (EDA passes), then full XML export (BIF passes).
 | `yeast_sc_perfect.align` | 2379 | Known ground-truth alignment |
 | `yeast_sc_s3_pure.align` | 2379 | Pure structural objective (S3=1.0) |
 | `yeast_sc_importance_pure.align` | 2379 | Pure biological objective (importance=1.0) |
+| `yeast_sc_s3_001.align` | 2379 | Blended (S3=0.001, importance=0.999) |
+| `yeast_sc_s3_003.align` | 2379 | Blended (S3=0.003, importance=0.997) |
+| `yeast_sc_s3_005.align` | 2379 | Blended (S3=0.005, importance=0.995) |
+| `yeast_sc_s3_010.align` | 2379 | Blended (S3=0.010, importance=0.990) |
+| `yeast_sc_s3_030.align` | 2379 | Blended (S3=0.030, importance=0.970) |
 | `yeast_sc_s3_050.align` | 2379 | Blended (S3=0.05, importance=0.95) |
+| `yeast_sc_s3_100.align` | 2379 | Blended (S3=0.100, importance=0.900) |
+
+### BIF files for round-trip testing (11 files)
+
+| File | Source | Annotation types |
+|------|--------|------------------|
+| `CaseStudy-III-Perfect.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-All-S3.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-All-Importance.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p001S3p999Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p003S3p997Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p005S3p995Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p01S3p99Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p03S3p97Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p05S3p95Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-p1S3p90Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-IV.bif` | DesaiEtAl-2019 | Cycle boundary annotations |
 
 ### Other input files (5 files)
 
@@ -139,7 +163,7 @@ both PerfectNG modes, and the cycle view shadow toggle:
 
 | ViewType | What it does | Tests |
 |----------|-------------|-------|
-| `GROUP` | Standard alignment layout with 7 link groups and node color classification | 7 baseline + 4 NG variants |
+| `GROUP` | Standard alignment layout with 7 link groups and node color classification | 13 baseline (2 toy + 11 realistic) + 4 NG variants |
 | `ORPHAN` | Filters to unaligned edges + 1-hop context (OrphanEdgeLayout) | 3 tests |
 | `CYCLE` | Highlights mis-alignments via cycle/path detection (AlignCycleLayout) | 3 tests (incl. shadows OFF) |
 
@@ -151,10 +175,10 @@ both PerfectNG modes, and the cycle view shadow toggle:
 | `NODE_CORRECTNESS` | 76 groups (split by correctness) | 4 tests |
 | `JACCARD_SIMILARITY` | 76 groups (split by JS threshold) | 1 test (threshold=0.75) |
 
-### Scoring metrics (35 tests)
+### Scoring metrics (77 tests)
 
-All 7 alignment quality metrics are tested across 5 alignment scenarios
-(7 × 5 = 35 test functions in `analysis_tests.rs`):
+All 7 alignment quality metrics are tested across 11 alignment scenarios
+(7 × 11 = 77 test functions in `analysis_tests.rs`):
 
 | Metric | Requires perfect alignment |
 |--------|---------------------------|
@@ -167,12 +191,16 @@ All 7 alignment quality metrics are tested across 5 alignment scenarios
 | JS (Jaccard Similarity) | Yes |
 
 Scenarios: `casestudy_iv`, `yeast_sc_perfect`, `yeast_sc_s3_pure`,
-`yeast_sc_importance_pure`, `yeast_sc_s3_050`. Each produces an
+`yeast_sc_importance_pure`, `yeast_sc_s3_050`, `yeast_sc_s3_001`,
+`yeast_sc_s3_003`, `yeast_sc_s3_005`, `yeast_sc_s3_010`,
+`yeast_sc_s3_030`, `yeast_sc_s3_100`. Each produces an
 `output.scores` file (tab-separated `metric\tvalue` lines).
 
-The 4 Yeast↔SC variants use the **same two networks** with **different
-alignment files** + `--perfect-align` reference, testing how alignment
-quality affects all 7 metrics and the merged network layout.
+The 10 Yeast↔SC variants use the **same two networks** with **different
+alignment files** + `--perfect-align` reference, covering the full
+S3/importance tradeoff curve from the DesaiEtAl-2019 paper. Ground-truth
+scoring values for the 6 new blends were extracted from the publication's
+original BIF files (`<plugInDataSets>/<NetAlignMeasure>` XML elements).
 
 ### Alignment data source
 
@@ -183,7 +211,8 @@ Realistic alignment test data from:
 
 - **Case Study IV**: SmallYeast ↔ LargeYeast (1004 nodes, GW format)
 - **Case Studies I-III**: Yeast2KReduced ↔ SC (2379/6600 nodes, SIF format)
-  with 4 alignment quality variants (perfect, pure S3, pure importance, blend)
+  with 10 alignment quality variants covering the full S3/importance tradeoff
+  curve (perfect, pure S3, pure importance, + 7 intermediate blends)
 
 ---
 
@@ -192,6 +221,11 @@ Realistic alignment test data from:
 These are the exact rules that must match Java for byte-level parity:
 
 ### Node ordering (DefaultLayout)
+
+> **Bug fix:** `GraphSearcher.nodeDegree()` had a bug on line 154 where
+> `retval0.get(trg)` looked up a `NetNode` in a `HashMap<NodeAndRel, ...>`,
+> always returning `null`. This has been fixed to `retval0.get(tar)`.
+> Goldens should be regenerated with `--rebuild` after this fix.
 
 1. Build degree map: count **all** links including shadows for each node
 2. Group nodes by degree (highest first), break ties lexicographically
@@ -256,7 +290,7 @@ For each node in row order:
 
 ## Remaining test surface
 
-Features not yet covered by parity tests (~32 tests / ~68 functions):
+Features not yet covered by parity tests (~24 tests / ~60 functions):
 
 | Category | Est. tests | Notes |
 |----------|-----------|-------|
@@ -264,7 +298,7 @@ Features not yet covered by parity tests (~32 tests / ~68 functions):
 | Alignment sub-features | ~4 | Cycle detection in `.align` file mappings; orphan edge filtering as a standalone analysis op. |
 | DefaultLayout custom start nodes | ~3 | `DefaultParams.startNodes` override; needs `--start-nodes` flag in GoldenGenerator. |
 | Algorithm parameter deep-variants | ~15 | ControlTop: `CTRL_INTRA_DEGREE_ONLY`, `CTRL_MEDIAN_TARGET_DEGREE`, `GRAY_CODE`, `NODE_DEGREE_ODOMETER_SOURCE`. NodeCluster: ordering (`LINK_SIZE`/`NODE_SIZE`/`NAME`), placement (`INLINE`/`BETWEEN`). NodeSimilarity: custom pass count, cosine distance, chain length, tolerance. SetLayout: `BOTH_IN_SET`. |
-| Populated annotations | ~2 | All goldens produce empty `<nodeAnnotations>`/`<linkAnnotations>`. Need a BIF with manual annotations. |
+| Populated annotations | ~0 | Covered by P16b: DesaiEtAl BIF round-trip files contain populated `<nodeAnnotations>`, `<linkAnnotations>`, and `<shadowLinkAnnotations>`. |
 | GZIP session handling | ~2 | Loading/saving `.bif.gz` compressed sessions. |
 
 Not relevant for CLI parity (safe to skip): zoom/navigation/scrolling,
@@ -296,12 +330,13 @@ background file reading, mouse-over views, browser URL templates.
 ./tests/parity/generate_goldens.sh --analysis-only
 ./tests/parity/generate_goldens.sh --display-only
 ./tests/parity/generate_goldens.sh --align-only
+./tests/parity/generate_goldens.sh --graph-analysis-only
 ```
 
 ## Running specific test subsets
 
 ```bash
-# All tests (381 functions)
+# All tests (446 functions)
 cargo test --test parity_tests -- --include-ignored
 cargo test --test analysis_tests -- --include-ignored
 
@@ -336,6 +371,8 @@ cargo test --test parity_tests -- --include-ignored orphan         # ORPHAN view
 cargo test --test parity_tests -- --include-ignored cycle          # CYCLE view
 cargo test --test parity_tests -- --include-ignored ng_nc          # NODE_CORRECTNESS
 cargo test --test parity_tests -- --include-ignored ng_jacc        # JACCARD_SIMILARITY
+cargo test --test parity_tests -- --include-ignored desai_blend   # DesaiEtAl blend variants
+cargo test --test parity_tests -- --include-ignored roundtrip_desai # BIF round-trip (annotations)
 
 # Analysis tests
 cargo test --test analysis_tests -- --include-ignored cycle        # Cycle detection
@@ -374,10 +411,13 @@ cargo test --test parity_tests -- --include-ignored gw_
 | P13 | Fixed-order import | `sif_triangle_fixed_noa_noa` |
 | P14 | Subnetwork extraction | `sif_triangle_extract_AB_noa` |
 | P15 | Cycle detection + Jaccard + first-neighbors | `cycle_triangle`, `jaccard_triangle_ab` |
+| P15b | Connected components + topo sort + degree | `components_triangle`, `toposort_dag_simple` |
 | P16 | Display options | `sif_triangle_drain0_bif` |
 | P17 | Alignment merge (GROUP view) | `align_perfect_noa` |
 | P18 | Alignment scoring (EC/S3/ICS/NC/NGS/LGS/JS) | `align_score_casestudy_iv_ec` |
 | P19 | Alignment ORPHAN view | `align_casestudy_iv_orphan_noa` |
 | P20 | Alignment CYCLE view | `align_casestudy_iv_cycle_noa` |
 | P21 | Alignment PerfectNG modes | `align_yeast_sc_perfect_ng_nc_noa` |
-| P22 | Realistic alignment at scale | `align_yeast_sc_perfect_noa` |
+| P22 | Realistic alignment at scale (full tradeoff curve) | `align_yeast_sc_s3_001_noa` through `align_yeast_sc_s3_100_noa` |
+| P23 | BIF round-trip with populated annotations | `roundtrip_desai_iii_perfect_bif` |
+| P24 | Speed benchmarks (Rust vs Java) | `test_speed_ba2K_default` (see `tests/bench/`) |

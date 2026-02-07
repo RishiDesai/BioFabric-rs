@@ -14,3 +14,10 @@ Cargo.lock
 # Test artifacts
 *.log
 **/__pycache__/
+
+# Golden files — regenerate with: ./tests/parity/generate_goldens.sh
+# These are large (BIF files can be 15MB+ each) and are generated from
+# the Java BioFabric source in a Docker container. The parity tests
+# gracefully skip when goldens are missing.
+tests/parity/goldens/*
+!tests/parity/goldens/.gitkeep
