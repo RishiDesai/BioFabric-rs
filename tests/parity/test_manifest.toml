@@ -1176,6 +1176,245 @@ tags = ["analysis", "jaccard", "p13"]
 
 # ==========================================================================
 #
+#  PHASE 13b: Graph analysis operations (connected components, topo sort, degree)
+#
+#  Golden files: output.components, output.toposort, output.degrees
+#  Generated via: GoldenGenerator --analysis connected_components,topo_sort,node_degree
+#
+#  These tests validate the core graph analysis algorithms against Java's
+#  GraphSearcher output. Unlike layout tests, they operate on the raw parsed
+#  network (pre-layout) and compare simpler text output.
+#
+# ==========================================================================
+
+# ---- Connected components ----
+
+[[test]]
+id = "analysis_components_single_node"
+description = "Connected components: single isolated node → 1 component of size 1"
+input = "single_node.sif"
+golden_dir = "analysis_components_single_node"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_single_edge"
+description = "Connected components: two nodes, one edge → 1 component of size 2"
+input = "single_edge.sif"
+golden_dir = "analysis_components_single_edge"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_triangle"
+description = "Connected components: triangle → 1 component of size 3"
+input = "triangle.sif"
+golden_dir = "analysis_components_triangle"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_isolated"
+description = "Connected components: 2 edges + 3 isolated nodes → 4 components [3,1,1,1]"
+input = "isolated_nodes.sif"
+golden_dir = "analysis_components_isolated"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_disconnected"
+description = "Connected components: 4 components [3,3,3,2] including I-J-K triangle"
+input = "disconnected_components.sif"
+golden_dir = "analysis_components_disconnected"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_linear_chain"
+description = "Connected components: 10-node path → 1 component of size 10"
+input = "linear_chain.sif"
+golden_dir = "analysis_components_linear_chain"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_dense_clique"
+description = "Connected components: K6 → 1 component of size 6"
+input = "dense_clique.sif"
+golden_dir = "analysis_components_dense_clique"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_multi_relation"
+description = "Connected components: multi-relation graph → 1 component of size 5"
+input = "multi_relation.sif"
+golden_dir = "analysis_components_multi_relation"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_bipartite"
+description = "Connected components: bipartite graph → 1 component of size 6"
+input = "bipartite.sif"
+golden_dir = "analysis_components_bipartite"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "p13b"]
+
+[[test]]
+id = "analysis_components_star500"
+description = "Connected components: star-500 → 1 component of size 501"
+input = "star-500.sif"
+golden_dir = "analysis_components_star500"
+layout = "analysis_components"
+shadows = true
+compare = ["components"]
+tags = ["analysis", "components", "stress", "p13b"]
+
+# ---- Topological sort (DAGs only) ----
+
+[[test]]
+id = "analysis_toposort_dag_simple"
+description = "Topo sort: Root→{Child1,Child2}→{Leaf1,Leaf2,Leaf3} — 3 levels"
+input = "dag_simple.sif"
+golden_dir = "analysis_toposort_dag_simple"
+layout = "analysis_toposort"
+shadows = true
+compare = ["toposort"]
+tags = ["analysis", "toposort", "p13b"]
+
+[[test]]
+id = "analysis_toposort_dag_diamond"
+description = "Topo sort: Top→{Left,Right}→Bottom diamond — 3 levels, converging paths"
+input = "dag_diamond.sif"
+golden_dir = "analysis_toposort_dag_diamond"
+layout = "analysis_toposort"
+shadows = true
+compare = ["toposort"]
+tags = ["analysis", "toposort", "p13b"]
+
+[[test]]
+id = "analysis_toposort_dag_deep"
+description = "Topo sort: L0→L1→...→L7 linear DAG — 8 levels"
+input = "dag_deep.sif"
+golden_dir = "analysis_toposort_dag_deep"
+layout = "analysis_toposort"
+shadows = true
+compare = ["toposort"]
+tags = ["analysis", "toposort", "p13b"]
+
+# ---- Node degree ----
+
+[[test]]
+id = "analysis_degree_triangle"
+description = "Node degree: triangle (all pp, undirected) — all nodes degree 4 with shadows"
+input = "triangle.sif"
+golden_dir = "analysis_degree_triangle"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_single_edge"
+description = "Node degree: single edge — both nodes degree 2"
+input = "single_edge.sif"
+golden_dir = "analysis_degree_single_edge"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_self_loop"
+description = "Node degree: self-loop graph — self-loop counts as 2 (both endpoints)"
+input = "self_loop.sif"
+golden_dir = "analysis_degree_self_loop"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_isolated_nodes"
+description = "Node degree: graph with isolated nodes — isolates get degree 0"
+input = "isolated_nodes.sif"
+golden_dir = "analysis_degree_isolated_nodes"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_multi_relation"
+description = "Node degree: multi-relation graph — degree counts across all relation types"
+input = "multi_relation.sif"
+golden_dir = "analysis_degree_multi_relation"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_dense_clique"
+description = "Node degree: K6 — all nodes degree 10 (5 edges × 2 for shadows)"
+input = "dense_clique.sif"
+golden_dir = "analysis_degree_dense_clique"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_star500"
+description = "Node degree: star-500 — hub degree 1000, leaves degree 2"
+input = "star-500.sif"
+golden_dir = "analysis_degree_star500"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "stress", "p13b"]
+
+[[test]]
+id = "analysis_degree_disconnected"
+description = "Node degree: disconnected graph — varying degrees across components"
+input = "disconnected_components.sif"
+golden_dir = "analysis_degree_disconnected"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+[[test]]
+id = "analysis_degree_dag_simple"
+description = "Node degree: DAG — SIF edges treated as undirected (get shadows)"
+input = "dag_simple.sif"
+golden_dir = "analysis_degree_dag_simple"
+layout = "analysis_degree"
+shadows = true
+compare = ["degrees"]
+tags = ["analysis", "degree", "p13b"]
+
+# ==========================================================================
+#
 #  PHASE 14: Display option permutations
 #
 #  BIF-only tests — display options affect colors and drain zones.

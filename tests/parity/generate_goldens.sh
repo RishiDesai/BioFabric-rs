@@ -32,6 +32,7 @@
 #   ./tests/parity/generate_goldens.sh --layouts-only    # only P5-P10 (layout algos)
 #   ./tests/parity/generate_goldens.sh --fixed-only      # only P11 (fixed-order)
 #   ./tests/parity/generate_goldens.sh --analysis-only   # only P12 (subnetwork extraction)
+#   ./tests/parity/generate_goldens.sh --graph-analysis-only # only P13b (components/topo/degree)
 #   ./tests/parity/generate_goldens.sh --display-only    # only P13 (display options)
 #   ./tests/parity/generate_goldens.sh --align-only      # only P14 (alignment)
 #
@@ -58,6 +59,7 @@ ONLY_FIXED=false
 ONLY_ANALYSIS=false
 ONLY_DISPLAY=false
 ONLY_ALIGN=false
+ONLY_GRAPH_ANALYSIS=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -70,6 +72,7 @@ for arg in "$@"; do
         --analysis-only)     ONLY_ANALYSIS=true ;;
         --display-only)      ONLY_DISPLAY=true ;;
         --align-only)        ONLY_ALIGN=true ;;
+        --graph-analysis-only) ONLY_GRAPH_ANALYSIS=true ;;
         *)                   FILTER="$arg" ;;
     esac
 done
@@ -78,7 +81,7 @@ done
 no_only_filter() {
     ! $ONLY_SHADOWS_ON && ! $ONLY_SHADOWS_OFF && ! $ONLY_GROUPS && \
     ! $ONLY_LAYOUTS && ! $ONLY_FIXED && ! $ONLY_ANALYSIS && \
-    ! $ONLY_DISPLAY && ! $ONLY_ALIGN
+    ! $ONLY_DISPLAY && ! $ONLY_ALIGN && ! $ONLY_GRAPH_ANALYSIS
 }
 
 # ---------- Build Docker image ----------
@@ -584,6 +587,64 @@ if no_only_filter || $ONLY_ANALYSIS; then
 fi
 
 # =========================================================================
+# Phase 13b: Graph analysis operations (connected components, topo sort, degree)
+# =========================================================================
+
+if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
+    echo "=== Phase 13b: Graph analysis ==="
+    echo
+
+    # Connected components for various topologies
+    ANALYSIS_COMP_NETS=(
+        single_node single_edge triangle self_loop isolated_nodes
+        disconnected_components linear_chain dense_clique multi_relation
+        bipartite star-500
+    )
+    echo "--- Connected components ---"
+    for name in "${ANALYSIS_COMP_NETS[@]}"; do
+        [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] analysis_components_${name} ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/${name}.sif" sif sif \
+            "analysis_components_${name}" \
+            --analysis connected_components || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    done
+
+    echo
+    echo "--- Topological sort (DAGs only) ---"
+    for dag in dag_simple dag_diamond dag_deep; do
+        [ -n "$FILTER" ] && [ "$dag" != "$FILTER" ] && continue
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] analysis_toposort_${dag} ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/${dag}.sif" sif sif \
+            "analysis_toposort_${dag}" \
+            --analysis topo_sort || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    done
+
+    echo
+    echo "--- Node degree ---"
+    ANALYSIS_DEG_NETS=(
+        triangle single_edge self_loop isolated_nodes multi_relation
+        dense_clique star-500 disconnected_components dag_simple
+    )
+    for name in "${ANALYSIS_DEG_NETS[@]}"; do
+        [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] analysis_degree_${name} ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/${name}.sif" sif sif \
+            "analysis_degree_${name}" \
+            --analysis node_degree || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    done
+    echo
+fi
+
+# =========================================================================
 # Phase 13: Display option permutations
 # =========================================================================
 
@@ -717,7 +778,8 @@ if no_only_filter || $ONLY_ALIGN; then
             "$NETWORKS_DIR/align:/align:ro" \
             -- \
             "/networks/CaseStudy-IV-SmallYeast.gw" "/goldens" \
-            --align "/networks/CaseStudy-IV-LargeYeast.gw" "/align/casestudy_iv.align" || rc=$?
+            --align "/networks/CaseStudy-IV-LargeYeast.gw" "/align/casestudy_iv.align" \
+            --perfect-align "/align/casestudy_iv.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi
