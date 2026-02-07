@@ -96,7 +96,7 @@ pub fn parse_reader_with_stats<R: Read>(
     let mut line_num: usize = 0;
 
     // Helper to read the next non-empty line
-    let mut next_line = |lines_iter: &mut std::io::Lines<BufReader<R>>, line_num: &mut usize| -> Result<String, ParseError> {
+    let next_line = |lines_iter: &mut std::io::Lines<BufReader<R>>, line_num: &mut usize| -> Result<String, ParseError> {
         loop {
             match lines_iter.next() {
                 Some(Ok(line)) => {
