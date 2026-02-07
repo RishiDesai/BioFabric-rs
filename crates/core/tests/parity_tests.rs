@@ -30,6 +30,7 @@
 //   cargo test --test parity_tests -- noa               # run all NOA tests
 //   cargo test --test parity_tests -- noshadow          # run all shadow-off tests
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use biofabric_core::io;
@@ -37,7 +38,7 @@ use biofabric_core::layout::build_data::LayoutBuildData;
 use biofabric_core::layout::default::{DefaultEdgeLayout, DefaultNodeLayout};
 use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeLayout};
 use biofabric_core::layout::result::NetworkLayout;
-use biofabric_core::model::Network;
+use biofabric_core::model::{Network, NodeId};
 use biofabric_core::worker::NoopMonitor;
 
 // ---------------------------------------------------------------------------
@@ -224,6 +225,109 @@ fn run_default_layout(network: &Network) -> NetworkLayout {
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
 
+/// Run layout with a pre-determined node order (for fixed-order import).
+///
+/// Skips the node layout phase entirely — uses the given node_order as-is —
+/// then runs the default edge layout.
+fn run_layout_with_node_order(network: &Network, node_order: Vec<NodeId>) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
+/// Run layout with link group configuration.
+///
+/// Uses the default BFS node layout, then runs the edge layout with
+/// non-zero group ordinals so edges are grouped by relation type.
+fn run_layout_with_groups(
+    network: &Network,
+    link_groups: &[String],
+    mode: LayoutMode,
+) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: mode,
+        link_groups: Some(link_groups.to_vec()),
+        ..Default::default()
+    };
+
+    // Node order is always computed with the default BFS algorithm;
+    // link groups only affect the edge ordering.
+    let node_layout = DefaultNodeLayout::new();
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
+/// Parse a NOA-format file ("Node Row" header, "name = row" lines).
+///
+/// These files use the BioFabric NOA export format:
+/// ```text
+/// Node Row
+/// C = 0
+/// B = 1
+/// A = 2
+/// ```
+///
+/// Returns node IDs sorted by ascending row number.
+fn parse_noa_format_file(path: &std::path::Path) -> Vec<NodeId> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read NOA file {}: {}", path.display(), e));
+    let mut entries: Vec<(String, usize)> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "Node Row" {
+            continue;
+        }
+        if let Some((name, row_str)) = trimmed.rsplit_once(" = ") {
+            let row: usize = row_str.parse()
+                .unwrap_or_else(|e| panic!("Invalid row number in NOA file: '{}': {}", trimmed, e));
+            entries.push((name.to_string(), row));
+        }
+    }
+    entries.sort_by_key(|(_, row)| *row);
+    entries.into_iter().map(|(name, _)| NodeId::new(name)).collect()
+}
+
+/// Path to a NOA file for fixed-order import.
+fn noa_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("noa").join(filename)
+}
+
+/// Extract a subnetwork from a loaded network using the specified node names.
+///
+/// Filters the network to include only the named nodes and edges where
+/// both endpoints are in the set. Shadow links are included transitively
+/// (if the original non-shadow link survives extraction, so does its shadow).
+fn extract_subnetwork(network: &Network, node_names: &[&str]) -> Network {
+    let node_ids: HashSet<NodeId> = node_names.iter().map(|n| NodeId::new(*n)).collect();
+    network.extract_subnetwork(&node_ids)
+}
+
 /// Format a NetworkLayout as NOA string.
 fn format_noa(layout: &NetworkLayout) -> String {
     let mut out = String::new();
@@ -290,6 +394,11 @@ fn format_eda_no_shadows(layout: &NetworkLayout) -> String {
 }
 
 /// Run a NOA (node order) parity test.
+///
+/// Supports:
+/// - `extract_nodes`: extract subnetwork before layout
+/// - `noa_file`: use imported node order instead of BFS
+/// - `link_groups`: node order is unchanged (groups only affect EDA)
 #[allow(dead_code)]
 fn run_noa_test(cfg: &ParityConfig) {
     if !golden_available(cfg.golden_dirname, "output.noa") {
@@ -305,14 +414,34 @@ fn run_noa_test(cfg: &ParityConfig) {
 
     let golden_noa = read_golden(cfg.golden_dirname, "output.noa");
 
-    let network = load_network(&input);
-    let layout = run_default_layout(&network);
-    let actual_noa = format_noa(&layout);
+    let mut network = load_network(&input);
 
+    // P12: Subnetwork extraction — filter to specified nodes before layout
+    if let Some(extract_nodes) = cfg.extract_nodes {
+        network = extract_subnetwork(&network, extract_nodes);
+    }
+
+    // P11: Fixed node-order import — use imported order instead of BFS
+    let layout = if let Some(noa_file) = cfg.noa_file {
+        let noa_path = noa_file_path(noa_file);
+        assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
+        let node_order = parse_noa_format_file(&noa_path);
+        run_layout_with_node_order(&network, node_order)
+    } else {
+        // P3 (link grouping) does NOT change node order — default BFS
+        run_default_layout(&network)
+    };
+
+    let actual_noa = format_noa(&layout);
     assert_parity("NOA", &golden_noa, &actual_noa);
 }
 
 /// Run an EDA (edge/link order) parity test.
+///
+/// Supports:
+/// - `extract_nodes`: extract subnetwork before layout
+/// - `noa_file`: use imported node order, then default edge layout
+/// - `link_groups` + `group_mode`: group edges by relation type
 #[allow(dead_code)]
 fn run_eda_test(cfg: &ParityConfig) {
     if !golden_available(cfg.golden_dirname, "output.eda") {
@@ -328,8 +457,33 @@ fn run_eda_test(cfg: &ParityConfig) {
 
     let golden_eda = read_golden(cfg.golden_dirname, "output.eda");
 
-    let network = load_network(&input);
-    let layout = run_default_layout(&network);
+    let mut network = load_network(&input);
+
+    // P12: Subnetwork extraction — filter to specified nodes before layout
+    if let Some(extract_nodes) = cfg.extract_nodes {
+        network = extract_subnetwork(&network, extract_nodes);
+    }
+
+    // Choose the appropriate layout strategy
+    let layout = if let Some(noa_file) = cfg.noa_file {
+        // P11: Fixed node-order import
+        let noa_path = noa_file_path(noa_file);
+        assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
+        let node_order = parse_noa_format_file(&noa_path);
+        run_layout_with_node_order(&network, node_order)
+    } else if let Some(link_groups) = cfg.link_groups {
+        // P3: Link grouping — reorder edges by relation type
+        let mode = match cfg.group_mode {
+            Some("per_node") => LayoutMode::PerNode,
+            Some("per_network") => LayoutMode::PerNetwork,
+            _ => LayoutMode::PerNode,
+        };
+        let groups: Vec<String> = link_groups.iter().map(|s| s.to_string()).collect();
+        run_layout_with_groups(&network, &groups, mode)
+    } else {
+        run_default_layout(&network)
+    };
+
     // The Java GoldenGenerator always exports the full EDA (including shadows)
     // regardless of the shadow display setting. The shadow toggle only affects
     // the visual rendering, not the EDA export format.
