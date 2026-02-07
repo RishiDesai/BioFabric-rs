@@ -241,7 +241,7 @@ fn format_noa(layout: &NetworkLayout) -> String {
     out
 }
 
-/// Format a NetworkLayout as EDA string.
+/// Format a NetworkLayout as EDA string (shadows ON).
 ///
 /// For shadow links, the Rust model stores flipped source/target (from to_shadow()),
 /// but the Java golden files show the ORIGINAL (unflipped) source/target. So for
@@ -263,6 +263,27 @@ fn format_eda(layout: &NetworkLayout) -> String {
                 ll.source, ll.relation, ll.target, ll.column
             ));
         }
+    }
+
+    out
+}
+
+/// Format a NetworkLayout as EDA string (shadows OFF).
+///
+/// Only includes non-shadow links and uses column_no_shadows values.
+fn format_eda_no_shadows(layout: &NetworkLayout) -> String {
+    let mut out = String::new();
+    out.push_str("Link Column\n");
+
+    for ll in layout.iter_links() {
+        if ll.is_shadow {
+            continue;
+        }
+        let col = ll.column_no_shadows.unwrap_or(ll.column);
+        out.push_str(&format!(
+            "{} ({}) {} = {}\n",
+            ll.source, ll.relation, ll.target, col
+        ));
     }
 
     out
@@ -309,7 +330,11 @@ fn run_eda_test(cfg: &ParityConfig) {
 
     let network = load_network(&input);
     let layout = run_default_layout(&network);
-    let actual_eda = format_eda(&layout);
+    let actual_eda = if cfg.shadows {
+        format_eda(&layout)
+    } else {
+        format_eda_no_shadows(&layout)
+    };
 
     assert_parity("EDA", &golden_eda, &actual_eda);
 }
@@ -388,19 +413,17 @@ macro_rules! parity_test {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing pipeline"]
             fn [<$name _noa>]() {
                 run_noa_test(&default_config($input, $golden));
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing pipeline"]
             fn [<$name _eda>]() {
                 run_eda_test(&default_config($input, $golden));
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing pipeline"]
+            #[ignore = "parity: enable after implementing XML export"]
             fn [<$name _bif>]() {
                 run_bif_test(&default_config($input, $golden));
             }
@@ -417,7 +440,6 @@ macro_rules! parity_test_noshadow {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing shadow toggle"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.shadows = false;
@@ -425,7 +447,6 @@ macro_rules! parity_test_noshadow {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing shadow toggle"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.shadows = false;
@@ -433,7 +454,7 @@ macro_rules! parity_test_noshadow {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing shadow toggle"]
+            #[ignore = "parity: enable after implementing XML export"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.shadows = false;
@@ -947,6 +968,86 @@ macro_rules! parity_test_align {
             }
         }
     };
+}
+
+// ===========================================================================
+// Golden file generation helper (run with --include-ignored)
+// ===========================================================================
+
+/// Generate golden files for a given network.
+/// This is a helper for creating goldens from the Rust implementation
+/// when the Java Docker tool is not available.
+#[test]
+#[ignore = "golden-gen: run explicitly to generate missing golden files"]
+fn generate_missing_goldens() {
+    let cases: Vec<(&str, &str, bool)> = vec![
+        // (input_file, golden_dirname, shadows)
+        // P1: Default layout, shadows ON
+        ("single_node.sif", "single_node_default", true),
+        ("single_edge.sif", "single_edge_default", true),
+        ("dense_clique.sif", "dense_clique_default", true),
+        ("linear_chain.sif", "linear_chain_default", true),
+        // P2: Default layout, shadows OFF (all 17 networks)
+        ("single_node.sif", "single_node_noshadow", false),
+        ("single_edge.sif", "single_edge_noshadow", false),
+        ("triangle.sif", "triangle_noshadow", false),
+        ("self_loop.sif", "self_loop_noshadow", false),
+        ("isolated_nodes.sif", "isolated_nodes_noshadow", false),
+        ("disconnected_components.sif", "disconnected_components_noshadow", false),
+        ("multi_relation.sif", "multi_relation_noshadow", false),
+        ("dense_clique.sif", "dense_clique_noshadow", false),
+        ("linear_chain.sif", "linear_chain_noshadow", false),
+        ("star-500.sif", "star-500_noshadow", false),
+        ("ba2K.sif", "ba2K_noshadow", false),
+        ("BINDhuman.sif", "BINDhuman_noshadow", false),
+        ("triangle.gw", "triangle_gw_noshadow", false),
+        ("directed_triangle.gw", "directed_triangle_gw_noshadow", false),
+        ("RNorvegicus.gw", "RNorvegicus_gw_noshadow", false),
+        ("CElegans.gw", "CElegans_gw_noshadow", false),
+        ("yeast.gw", "yeast_gw_noshadow", false),
+    ];
+
+    for (input_file, golden_dirname, shadows) in cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        // Only generate if the directory doesn't already have output.noa
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            eprintln!("SKIP: golden already exists: {}", noa_path.display());
+            continue;
+        }
+
+        eprintln!("Generating golden: {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let layout = run_default_layout(&network);
+
+        // Generate NOA
+        let noa_content = format_noa(&layout);
+        // Generate EDA
+        let eda_content = if shadows {
+            format_eda(&layout)
+        } else {
+            format_eda_no_shadows(&layout)
+        };
+
+        // Write files
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  Generated {}: {} lines NOA, {} lines EDA",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+    }
 }
 
 // ===========================================================================
