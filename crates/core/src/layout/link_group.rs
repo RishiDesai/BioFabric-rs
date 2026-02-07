@@ -223,10 +223,28 @@ impl LinkSortKey {
             (top_row, bottom_row)
         };
 
-        let direction_ordinal = match link.directed {
-            None | Some(false) => 0, // undirected
-            Some(true) if source_row <= target_row => 1, // directed down
-            Some(true) => 2, // directed up
+        // Direction ordinal: undirected=0, directed-down=1, directed-up=2.
+        //
+        // IMPORTANT: In the Rust model, shadow links have FLIPPED source/target
+        // (from Link::to_shadow()). But in Java, shadow links keep the ORIGINAL
+        // source/target. The Java comparator (DefaultFabricLinkLocater.orderForNode)
+        // determines direction from the link's source_row vs target_row, which in
+        // Java are the ORIGINAL rows. To match Java, we must use the original
+        // direction for shadow links — i.e., invert the test for shadows.
+        let direction_ordinal = if link.is_shadow {
+            match link.directed {
+                None | Some(false) => 0,
+                // Shadow has flipped src/tgt; original direction is reversed:
+                // If target_row <= source_row, original was source→target going down
+                Some(true) if target_row <= source_row => 1,
+                Some(true) => 2,
+            }
+        } else {
+            match link.directed {
+                None | Some(false) => 0,
+                Some(true) if source_row <= target_row => 1, // directed down
+                Some(true) => 2, // directed up
+            }
         };
 
         Self {
