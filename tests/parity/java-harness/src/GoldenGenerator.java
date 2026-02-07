@@ -517,7 +517,25 @@ public class GoldenGenerator {
             alod2.readAttributes(eda, false, attribs, nameToID, stats);
 
             BuildDataImpl bd = new BuildDataImpl(bfn, BuildDataImpl.BuildMode.LINK_ATTRIB_LAYOUT, null);
-            SortedMap<Integer, NetLink> checkedOrder = bfn.checkNewLinkOrder(attribs);
+            // Manual link order resolution (avoids ClassCastException from
+            // TreeSet<NetLink> in checkNewLinkOrder — FabricLink is not Comparable).
+            // Build a relation->direction map from the existing network links.
+            HashMap<AugRelation, Boolean> relDir = new HashMap<AugRelation, Boolean>();
+            for (NetLink existingLink : bfn.getAllLinks(true)) {
+                relDir.put(existingLink.getAugRelation(), existingLink.isDirected());
+            }
+            // Build column -> directed link map from the EDA attributes.
+            TreeMap<Integer, NetLink> checkedOrder = new TreeMap<Integer, NetLink>();
+            for (Map.Entry<AttributeKey, String> ae : attribs.entrySet()) {
+                org.systemsbiology.biofabric.model.FabricLink attrLink =
+                    (org.systemsbiology.biofabric.model.FabricLink) ae.getKey();
+                org.systemsbiology.biofabric.model.FabricLink dirCopy = attrLink.clone();
+                Boolean isDirected = relDir.get(dirCopy.getAugRelation());
+                if (isDirected != null) {
+                    dirCopy.installDirection(isDirected);
+                }
+                checkedOrder.put(Integer.valueOf(ae.getValue()), dirCopy);
+            }
             bd.setLinkOrder(checkedOrder);
             bfn = new BioFabricNetwork(bd, plum, null);
 
@@ -681,7 +699,7 @@ public class GoldenGenerator {
             Set<NetNode> reducedLonersPerfect = new HashSet<NetNode>();
             NetworkAlignment.NodeColorMap nodeColorMapPerfect = null;
 
-            if (perfectG1toG2 != null) {
+            if (perfectAlignFile != null) {
                 ArrayList<NetLink> mergedLinksPerfect = new ArrayList<NetLink>();
                 Set<NetNode> mergedLonersPerfect = new HashSet<NetNode>();
                 Map<NetNode, Boolean> mergedToCorrectNCPerfect = new HashMap<NetNode, Boolean>();
@@ -704,14 +722,20 @@ public class GoldenGenerator {
                 reducedLonersPerfect = new HashSet<NetNode>(mergedLonersPerfect);
             }
 
-            NetworkAlignmentScorer scorer = new NetworkAlignmentScorer(
-                reducedLinks, reducedLoners,
-                mergedToCorrectNC, nodeColorMap,
-                nodeColorMapPerfect,
-                reducedLinksPerfect, reducedLonersPerfect,
-                linksG1, lonersG1, linksG2, lonersG2,
-                mapG1toG2, perfectG1toG2, null, rMan);
-            alignScores = scorer.getNetAlignStats();
+            if (perfectAlignFile != null) {
+                NetworkAlignmentScorer scorer = new NetworkAlignmentScorer(
+                    reducedLinks, reducedLoners,
+                    mergedToCorrectNC, nodeColorMap,
+                    nodeColorMapPerfect,
+                    reducedLinksPerfect, reducedLonersPerfect,
+                    linksG1, lonersG1, linksG2, lonersG2,
+                    mapG1toG2, perfectG1toG2, null, rMan);
+                alignScores = scorer.getNetAlignStats();
+            } else {
+                // No perfect alignment: skip scoring (would NPE in
+                // JaccardSimilarity when inverse perfect map is empty).
+                alignScores = new NetworkAlignmentPlugIn.NetAlignStats();
+            }
 
             System.out.println("  Scores computed: " + alignScores.getMeasures().size() + " metrics");
             for (NetworkAlignmentPlugIn.NetAlignMeasure m : alignScores.getMeasures()) {
@@ -957,7 +981,91 @@ public class GoldenGenerator {
                 }
 
                 bd.setCTL(cMode, tMode, controlNodes, bfn);
-                bfn = runLayoutAndBuild(bd);
+
+                if (cMode == ControlTopLayout.CtrlMode.FIXED_LIST) {
+                    // Workaround: ControlTopLayout.java:257 has a bug where
+                    // ctrlList = null for FIXED_LIST mode.  We resolve the
+                    // fixed-order control-node names to NetNode objects and
+                    // replicate the target-mode ordering logic here.
+
+                    // Resolve control-node names -> NetNode list (preserving user order)
+                    Map<String, Set<NetNode>> normNameToIDs = bd.genNormNameToID();
+                    List<NetNode> resolvedCtrlList = new ArrayList<NetNode>();
+                    for (String name : controlNodes) {
+                        String normName = org.systemsbiology.biofabric.util.DataUtil.normKey(name);
+                        Set<NetNode> matches = normNameToIDs.get(normName);
+                        if (matches != null && matches.size() == 1) {
+                            resolvedCtrlList.add(matches.iterator().next());
+                        }
+                    }
+
+                    // Compute the full set of control nodes (every node with outgoing links)
+                    Set<NetNode> ctrlNodeSet = new HashSet<NetNode>();
+                    for (NetLink link : bd.getLinks()) {
+                        ctrlNodeSet.add(link.getSrcNode());
+                    }
+                    SortedSet<NetNode> cnSet = new TreeSet<NetNode>(ctrlNodeSet);
+
+                    // The fixed list may be a subset of all control nodes.
+                    // Append any remaining control nodes (in natural order) after the fixed list.
+                    Set<NetNode> fixedSet = new HashSet<NetNode>(resolvedCtrlList);
+                    for (NetNode cn : cnSet) {
+                        if (!fixedSet.contains(cn)) {
+                            resolvedCtrlList.add(cn);
+                        }
+                    }
+                    System.out.println("  FIXED_LIST: resolved " + resolvedCtrlList.size() +
+                        " control nodes (" + controlNodes.size() + " fixed + " +
+                        (resolvedCtrlList.size() - controlNodes.size()) + " remaining)");
+
+                    // Build node order using the selected target mode
+                    List<NetNode> nodeOrder;
+                    switch (tMode) {
+                        case TARGET_DEGREE: {
+                            GraphSearcher gs = new GraphSearcher(bd.getAllNodes(), bd.getLinks());
+                            List<NetNode> dfo = gs.nodeDegreeOrder(false, NOOP_MONITOR);
+                            Collections.reverse(dfo);
+                            Set<NetNode> targs = new HashSet<NetNode>(bd.getAllNodes());
+                            targs.removeAll(cnSet);
+                            nodeOrder = new ArrayList<NetNode>(resolvedCtrlList);
+                            for (NetNode n : dfo) {
+                                if (targs.contains(n)) nodeOrder.add(n);
+                            }
+                            break;
+                        }
+                        case BREADTH_ORDER: {
+                            GraphSearcher gs = new GraphSearcher(bd.getAllNodes(), bd.getLinks());
+                            List<GraphSearcher.QueueEntry> queue =
+                                gs.breadthSearch(resolvedCtrlList, false, NOOP_MONITOR);
+                            nodeOrder = new ArrayList<NetNode>(resolvedCtrlList);
+                            for (GraphSearcher.QueueEntry qe : queue) {
+                                if (!cnSet.contains(qe.name)) {
+                                    nodeOrder.add(qe.name);
+                                }
+                            }
+                            break;
+                        }
+                        default:
+                            throw new IllegalStateException(
+                                "Unsupported target mode for FIXED_LIST workaround: " + tMode);
+                    }
+
+                    // Append singletons
+                    Set<NetNode> loneNodes = bd.getSingletonNodes();
+                    if (loneNodes != null && !loneNodes.isEmpty()) {
+                        nodeOrder.addAll(new TreeSet<NetNode>(loneNodes));
+                    }
+
+                    // Install node order and run edge layout
+                    bd.getNodeLayout().installNodeOrder(nodeOrder, bd, NOOP_MONITOR);
+                    EdgeLayout el = bd.getEdgeLayout();
+                    if (el != null) {
+                        el.layoutEdges(bd, NOOP_MONITOR);
+                    }
+                    bfn = new BioFabricNetwork(bd, plum, NOOP_MONITOR);
+                } else {
+                    bfn = runLayoutAndBuild(bd);
+                }
                 break;
 
             case "set":
@@ -978,6 +1086,21 @@ public class GoldenGenerator {
                     }
                 }
                 bd.setLinkMeaning(lm);
+
+                // Workaround: BioFabric's extractRelations marks SIF relations
+                // without reverse pairs as undirected. SetLayout requires directed
+                // links for its bipartite analysis. Force all links to directed
+                // using reflection (directed_ field is already frozen as false).
+                {
+                    java.lang.reflect.Field dirField =
+                        org.systemsbiology.biofabric.model.FabricLink.class.getDeclaredField("directed_");
+                    dirField.setAccessible(true);
+                    for (NetLink link : bd.getLinks()) {
+                        dirField.set(link, Boolean.TRUE);
+                    }
+                    System.out.println("  Forced " + bd.getLinks().size() + " links to directed for SetLayout.");
+                }
+
                 bfn = runLayoutAndBuild(bd);
                 break;
 
