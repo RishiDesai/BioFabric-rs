@@ -303,6 +303,7 @@ fn curve_average(curve: &BTreeMap<usize, f64>) -> f64 {
 /// If want is in the set, lo == hi == want.
 /// If want is below minimum, lo == hi == minimum.
 /// If want is above maximum, lo == hi == maximum.
+#[allow(dead_code)]
 fn bounding_ints(vals: &BTreeSet<usize>, want: usize) -> Option<(usize, usize)> {
     if vals.is_empty() {
         return None;
@@ -346,30 +347,40 @@ fn interp_curve(curve: &BTreeMap<usize, f64>, x_val: usize) -> f64 {
         return val;
     }
 
-    let keys: BTreeSet<usize> = curve.keys().copied().collect();
-    if let Some((lo, hi)) = bounding_ints(&keys, x_val) {
-        if lo != hi {
+    if curve.is_empty() {
+        return 0.0;
+    }
+
+    let &first_key = curve.keys().next().unwrap();
+    let &last_key = curve.keys().next_back().unwrap();
+
+    if x_val < first_key {
+        // Below the minimum — Java returns 0.0.
+        return 0.0;
+    }
+
+    if x_val > last_key {
+        // Above the maximum — Java returns curve.get(firstKey).
+        return curve.get(&first_key).copied().unwrap_or(0.0);
+    }
+
+    // Find bounding keys directly from the BTreeMap.
+    let lo = curve.range(..x_val).next_back().map(|(&k, _)| k);
+    let hi = curve.range((x_val + 1)..).next().map(|(&k, _)| k);
+
+    match (lo, hi) {
+        (Some(lo_key), Some(hi_key)) => {
             // Linear interpolation.
-            let val1 = lo as f64;
-            let val2 = hi as f64;
+            let val1 = lo_key as f64;
+            let val2 = hi_key as f64;
             let calc_for = x_val as f64;
             let w0 = (calc_for - val2) / (val1 - val2);
             let w1 = 1.0 - w0;
-            let y_lo = curve.get(&lo).copied().unwrap_or(0.0);
-            let y_hi = curve.get(&hi).copied().unwrap_or(0.0);
+            let y_lo = curve.get(&lo_key).copied().unwrap_or(0.0);
+            let y_hi = curve.get(&hi_key).copied().unwrap_or(0.0);
             w0 * y_lo + w1 * y_hi
-        } else {
-            // lo == hi: either above or below the range.
-            let &first_key = keys.iter().next().unwrap();
-            if lo > first_key {
-                // Above the last key.
-                curve.get(&curve.keys().next().copied().unwrap()).copied().unwrap_or(0.0)
-            } else {
-                0.0
-            }
         }
-    } else {
-        0.0
+        _ => 0.0,
     }
 }
 
@@ -380,24 +391,56 @@ fn calc_shape_delta(
     curve1: &BTreeMap<usize, f64>,
     curve2: &BTreeMap<usize, f64>,
 ) -> f64 {
+    calc_shape_delta_with_avgs(
+        curve1,
+        curve_average(curve1),
+        curve2,
+        curve_average(curve2),
+    )
+}
+
+/// Calculate shape delta between two curves with pre-computed averages.
+///
+/// This avoids recomputing curve averages in tight loops.
+fn calc_shape_delta_with_avgs(
+    curve1: &BTreeMap<usize, f64>,
+    ca1: f64,
+    curve2: &BTreeMap<usize, f64>,
+    ca2: f64,
+) -> f64 {
     if curve1.is_empty() || curve2.is_empty() {
         return f64::INFINITY;
     }
 
-    let ca1 = curve_average(curve1);
-    let ca2 = curve_average(curve2);
-
     // Union of all x-points.
-    let mut union_keys: BTreeSet<usize> = BTreeSet::new();
-    for &k in curve1.keys() {
-        union_keys.insert(k);
-    }
-    for &k in curve2.keys() {
-        union_keys.insert(k);
-    }
-
     let mut delta_sq_sum = 0.0;
-    for &point in &union_keys {
+
+    // Merge-iterate both sorted maps for the union of keys.
+    let mut iter1 = curve1.iter().peekable();
+    let mut iter2 = curve2.iter().peekable();
+
+    loop {
+        let point = match (iter1.peek(), iter2.peek()) {
+            (Some((&k1, _)), Some((&k2, _))) => {
+                if k1 <= k2 {
+                    k1
+                } else {
+                    k2
+                }
+            }
+            (Some((&k1, _)), None) => k1,
+            (None, Some((&k2, _))) => k2,
+            (None, None) => break,
+        };
+
+        // Advance iterators past this point.
+        if iter1.peek().map(|(&k, _)| k) == Some(point) {
+            iter1.next();
+        }
+        if iter2.peek().map(|(&k, _)| k) == Some(point) {
+            iter2.next();
+        }
+
         let v1 = interp_curve(curve1, point) - ca1;
         let v2 = interp_curve(curve2, point) - ca2;
         let y_delt = v1 - v2;
@@ -555,6 +598,15 @@ fn resort_pass(prep: &ClusterPrep) -> Vec<usize> {
         return Vec::new();
     }
 
+    // Pre-compute curve averages to avoid recomputing them in every delta call.
+    let curve_avgs: HashMap<usize, f64> = prep
+        .curves
+        .iter()
+        .map(|(&k, v)| (k, curve_average(v)))
+        .collect();
+
+    let empty_curve = BTreeMap::new();
+
     let mut still_avail: BTreeSet<usize> = prep.new_to_old.keys().copied().collect();
     let mut results: BTreeMap<usize, usize> = BTreeMap::new();
 
@@ -562,14 +614,17 @@ fn resort_pass(prep: &ClusterPrep) -> Vec<usize> {
     let first = 0;
     results.insert(first, 0);
     still_avail.remove(&first);
-    let mut base_curve = prep.curves.get(&first).cloned().unwrap_or_default();
+    let mut base_idx = first;
     let mut fill_slot = 1usize;
 
     while !still_avail.is_empty() {
         let &start_check = still_avail.iter().next().unwrap();
 
+        let base_curve = prep.curves.get(&base_idx).unwrap_or(&empty_curve);
+        let base_avg = curve_avgs.get(&base_idx).copied().unwrap_or(0.0);
+
         // Build candidate set.
-        let mut conn_buf = build_check_set(&base_curve, &prep.connect_map);
+        let mut conn_buf = build_check_set(base_curve, &prep.connect_map);
         conn_buf.retain(|x| still_avail.contains(x));
         // Always include start_check.
         conn_buf.insert(start_check);
@@ -578,8 +633,10 @@ fn resort_pass(prep: &ClusterPrep) -> Vec<usize> {
         let mut min_i = start_check;
 
         for &swap_check in &conn_buf {
-            let cand_curve = prep.curves.get(&swap_check).cloned().unwrap_or_default();
-            let delt = calc_shape_delta(&base_curve, &cand_curve);
+            let cand_curve = prep.curves.get(&swap_check).unwrap_or(&empty_curve);
+            let cand_avg = curve_avgs.get(&swap_check).copied().unwrap_or(0.0);
+            let delt =
+                calc_shape_delta_with_avgs(base_curve, base_avg, cand_curve, cand_avg);
             if delt < min_match {
                 min_i = swap_check;
                 min_match = delt;
@@ -587,11 +644,11 @@ fn resort_pass(prep: &ClusterPrep) -> Vec<usize> {
         }
 
         if min_i > start_check {
-            base_curve = prep.curves.get(&min_i).cloned().unwrap_or_default();
+            base_idx = min_i;
             still_avail.remove(&min_i);
             results.insert(min_i, fill_slot);
         } else {
-            base_curve = prep.curves.get(&start_check).cloned().unwrap_or_default();
+            base_idx = start_check;
             still_avail.remove(&start_check);
             results.insert(start_check, fill_slot);
         }
@@ -600,8 +657,6 @@ fn resort_pass(prep: &ClusterPrep) -> Vec<usize> {
 
     // Convert: for each position in original order, look up its value in old_to_new,
     // then find that value's mapped slot in results.
-    // Java: retval.add(results.get(prep.oldToNew.values().get(i)))
-    // Since old_to_new is a TreeMap iterated in key order:
     let mut retval = Vec::with_capacity(prep.num_rows);
     for i in 0..prep.num_rows {
         let new_row = prep.old_to_new.get(&i).copied().unwrap_or(i);
