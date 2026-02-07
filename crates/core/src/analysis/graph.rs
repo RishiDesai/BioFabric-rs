@@ -27,28 +27,38 @@ use std::collections::{HashMap, HashSet, VecDeque};
 ///     println!("Visited: {}", node);
 /// }
 /// ```
-pub fn bfs(_network: &Network, _start: &NodeId) -> Vec<NodeId> {
-    // TODO: Implement BFS
-    //
-    // See Java implementation in org.systemsbiology.biofabric.analysis.GraphSearcher
-    //
-    // Algorithm:
-    // 1. Check that start node exists
-    // 2. Initialize queue with start node
-    // 3. Initialize visited set with start node
-    // 4. While queue is not empty:
-    //    a. Dequeue next node
-    //    b. Add to result
-    //    c. For each neighbor not in visited:
-    //       - Add to visited
-    //       - Enqueue
-    // 5. Return result
-    //
-    // Key behaviors:
-    // - Only visits nodes reachable from start
-    // - Consistent ordering (sort neighbors before enqueueing for reproducibility)
-    //
-    todo!("Implement BFS - see GraphSearcher.java")
+pub fn bfs(network: &Network, start: &NodeId) -> Vec<NodeId> {
+    if !network.contains_node(start) {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+
+    visited.insert(start.clone());
+    queue.push_back(start.clone());
+
+    while let Some(node_id) = queue.pop_front() {
+        result.push(node_id.clone());
+
+        let mut neighbors: Vec<NodeId> = network
+            .neighbors(&node_id)
+            .into_iter()
+            .filter(|n| !visited.contains(*n))
+            .cloned()
+            .collect();
+        // Sort lexicographically for determinism
+        neighbors.sort();
+
+        for neighbor in neighbors {
+            if visited.insert(neighbor.clone()) {
+                queue.push_back(neighbor);
+            }
+        }
+    }
+
+    result
 }
 
 /// Perform depth-first search from a starting node.
@@ -61,25 +71,38 @@ pub fn bfs(_network: &Network, _start: &NodeId) -> Vec<NodeId> {
 ///
 /// # Returns
 /// Vector of node IDs in DFS visit order, or empty if start node doesn't exist.
-pub fn dfs(_network: &Network, _start: &NodeId) -> Vec<NodeId> {
-    // TODO: Implement DFS
-    //
-    // Algorithm:
-    // 1. Check that start node exists
-    // 2. Initialize stack with start node
-    // 3. Initialize visited set
-    // 4. While stack is not empty:
-    //    a. Pop next node
-    //    b. If not visited:
-    //       - Mark as visited
-    //       - Add to result
-    //       - Push all unvisited neighbors onto stack
-    // 5. Return result
-    //
-    // Key behaviors:
-    // - Consistent ordering (sort neighbors for reproducibility)
-    //
-    todo!("Implement DFS")
+pub fn dfs(network: &Network, start: &NodeId) -> Vec<NodeId> {
+    if !network.contains_node(start) {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut visited = HashSet::new();
+    let mut stack = Vec::new();
+
+    stack.push(start.clone());
+
+    while let Some(node_id) = stack.pop() {
+        if !visited.insert(node_id.clone()) {
+            continue;
+        }
+        result.push(node_id.clone());
+
+        let mut neighbors: Vec<NodeId> = network
+            .neighbors(&node_id)
+            .into_iter()
+            .filter(|n| !visited.contains(*n))
+            .cloned()
+            .collect();
+        // Sort in reverse so that the smallest comes out first from the stack
+        neighbors.sort_by(|a, b| b.cmp(a));
+
+        for neighbor in neighbors {
+            stack.push(neighbor);
+        }
+    }
+
+    result
 }
 
 /// Find all connected components in the network.
@@ -94,26 +117,33 @@ pub fn dfs(_network: &Network, _start: &NodeId) -> Vec<NodeId> {
 /// println!("Found {} components", components.len());
 /// println!("Largest component has {} nodes", components[0].len());
 /// ```
-pub fn connected_components(_network: &Network) -> Vec<Vec<NodeId>> {
-    // TODO: Implement connected components
-    //
-    // Algorithm:
-    // 1. Initialize empty result
-    // 2. Initialize set of all unvisited nodes
-    // 3. While there are unvisited nodes:
-    //    a. Find highest-degree unvisited node
-    //    b. Run BFS from that node
-    //    c. All visited nodes form one component
-    //    d. Remove these nodes from unvisited set
-    //    e. Add component to result
-    // 4. Sort components by size (descending)
-    // 5. Return result
-    //
-    // Key behaviors:
-    // - Handles isolated nodes (each is its own component)
-    // - Consistent ordering for reproducibility
-    //
-    todo!("Implement connected components")
+pub fn connected_components(network: &Network) -> Vec<Vec<NodeId>> {
+    let mut unvisited: HashSet<NodeId> = network.node_ids().cloned().collect();
+    let mut components = Vec::new();
+
+    while !unvisited.is_empty() {
+        // Find highest-degree unvisited node (break ties lexicographically)
+        let start = unvisited
+            .iter()
+            .max_by(|a, b| {
+                network
+                    .degree(a)
+                    .cmp(&network.degree(b))
+                    .then_with(|| b.cmp(a)) // lex ascending means prefer smaller name
+            })
+            .cloned()
+            .unwrap();
+
+        let component = bfs(network, &start);
+        for node in &component {
+            unvisited.remove(node);
+        }
+        components.push(component);
+    }
+
+    // Sort components by size descending
+    components.sort_by(|a, b| b.len().cmp(&a.len()));
+    components
 }
 
 /// Find the shortest path between two nodes.
@@ -128,15 +158,50 @@ pub fn connected_components(_network: &Network) -> Vec<Vec<NodeId>> {
 ///
 /// # Returns
 /// `Some(path)` if a path exists, `None` otherwise.
-pub fn shortest_path(_network: &Network, _start: &NodeId, _end: &NodeId) -> Option<Vec<NodeId>> {
-    // TODO: Implement shortest path (BFS-based for unweighted graphs)
-    //
-    // Algorithm:
-    // 1. BFS from start, tracking parent of each visited node
-    // 2. When end is found, reconstruct path by following parents
-    // 3. Return reversed path
-    //
-    todo!("Implement shortest path")
+pub fn shortest_path(network: &Network, start: &NodeId, end: &NodeId) -> Option<Vec<NodeId>> {
+    if !network.contains_node(start) || !network.contains_node(end) {
+        return None;
+    }
+    if start == end {
+        return Some(vec![start.clone()]);
+    }
+
+    let mut visited = HashSet::new();
+    let mut parent: HashMap<NodeId, NodeId> = HashMap::new();
+    let mut queue = VecDeque::new();
+
+    visited.insert(start.clone());
+    queue.push_back(start.clone());
+
+    while let Some(node_id) = queue.pop_front() {
+        let mut neighbors: Vec<NodeId> = network
+            .neighbors(&node_id)
+            .into_iter()
+            .filter(|n| !visited.contains(*n))
+            .cloned()
+            .collect();
+        neighbors.sort();
+
+        for neighbor in neighbors {
+            if visited.insert(neighbor.clone()) {
+                parent.insert(neighbor.clone(), node_id.clone());
+                if &neighbor == end {
+                    // Reconstruct path
+                    let mut path = vec![neighbor];
+                    let mut current = &path[0];
+                    while let Some(p) = parent.get(current) {
+                        path.push(p.clone());
+                        current = path.last().unwrap();
+                    }
+                    path.reverse();
+                    return Some(path);
+                }
+                queue.push_back(neighbor);
+            }
+        }
+    }
+
+    None
 }
 
 /// Get nodes within N hops of a starting node.
@@ -148,15 +213,37 @@ pub fn shortest_path(_network: &Network, _start: &NodeId, _end: &NodeId) -> Opti
 ///
 /// # Returns
 /// Set of node IDs within the specified distance.
-pub fn neighborhood(_network: &Network, _start: &NodeId, _hops: usize) -> HashSet<NodeId> {
-    // TODO: Implement neighborhood query
-    //
-    // Algorithm:
-    // 1. BFS from start, but track depth
-    // 2. Stop when depth exceeds hops
-    // 3. Return all visited nodes
-    //
-    todo!("Implement neighborhood")
+pub fn neighborhood(network: &Network, start: &NodeId, hops: usize) -> HashSet<NodeId> {
+    if !network.contains_node(start) {
+        return HashSet::new();
+    }
+
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+
+    visited.insert(start.clone());
+    queue.push_back((start.clone(), 0usize));
+
+    while let Some((node_id, depth)) = queue.pop_front() {
+        if depth >= hops {
+            continue;
+        }
+        let mut neighbors: Vec<NodeId> = network
+            .neighbors(&node_id)
+            .into_iter()
+            .filter(|n| !visited.contains(*n))
+            .cloned()
+            .collect();
+        neighbors.sort();
+
+        for neighbor in neighbors {
+            if visited.insert(neighbor.clone()) {
+                queue.push_back((neighbor, depth + 1));
+            }
+        }
+    }
+
+    visited
 }
 
 /// Find the node with highest degree in the network.
