@@ -130,43 +130,64 @@ pub fn parse_reader_with_stats<R: Read>(
         }
     }
 
-    // Phase 2: Preprocess links — deduplicate and remove undirected reverse pairs.
-    // This matches Java's BuildExtractorImpl.preprocessLinks():
-    // - Exact duplicates (same src, tgt, rel) → culled
-    // - For undirected non-feedback links, if both (A→B) and (B→A) exist, keep first-seen
-    //
-    // We track seen edges using a canonical form (sorted pair) for undirected dedup,
-    // but preserve the original link direction from the first occurrence.
+    // Phase 2: Determine which relations are "directed" (have reverse pairs).
+    // Java's BuildExtractorImpl.extractRelations(): if ANY non-feedback link of a
+    // relation has a reverse counterpart (same relation, swapped src/tgt), that
+    // relation is marked as directed. This affects dedup in preprocessLinks:
+    // - Directed relations: only exact duplicates are culled (reverse pairs kept)
+    // - Undirected relations: reverse pairs are also culled (canonical dedup)
+    let norm_key = |s: &str| -> String { s.to_uppercase().replace(' ', "") };
+
+    let mut directed_relations: std::collections::HashSet<String> = std::collections::HashSet::new();
+    {
+        let mut flip_set: std::collections::HashSet<(String, String, String)> =
+            std::collections::HashSet::new();
+        for (source, relation, target) in &raw_links {
+            let ns = norm_key(source);
+            let nt = norm_key(target);
+            let nr = norm_key(relation);
+            if ns == nt {
+                continue; // Feedback not flippable
+            }
+            let flip_key = (nt.clone(), ns.clone(), nr.clone());
+            if flip_set.contains(&flip_key) {
+                directed_relations.insert(nr);
+            } else {
+                flip_set.insert((ns, nt, nr));
+            }
+        }
+    }
+
+    // Phase 3: Preprocess links with direction-aware dedup.
     let mut seen_edges: std::collections::HashSet<(String, String, String)> =
         std::collections::HashSet::new();
     let mut links: Vec<Link> = Vec::new();
 
     for (source, relation, target) in raw_links {
         let is_feedback = source == target;
+        let ns = norm_key(&source);
+        let nt = norm_key(&target);
+        let nr = norm_key(&relation);
+        let is_directed = directed_relations.contains(&nr);
 
-        // For undirected non-feedback links, use canonical (sorted) key
-        // to catch both A→B and B→A as the same edge.
-        // Use normKey (uppercase + no spaces) for consistent comparison.
-        let norm_src = source.to_uppercase().replace(' ', "");
-        let norm_tgt = target.to_uppercase().replace(' ', "");
-        let norm_rel = relation.to_uppercase().replace(' ', "");
-        let canonical_key = if !is_feedback {
-            let (a, b) = if norm_src <= norm_tgt {
-                (norm_src, norm_tgt)
-            } else {
-                (norm_tgt, norm_src)
-            };
-            (a, b, norm_rel)
+        // For undirected non-feedback links, canonical key uses sorted pair.
+        // For directed or feedback links, use directional key (exact match dedup only).
+        let dedup_key = if !is_feedback && !is_directed {
+            let (a, b) = if ns <= nt { (ns, nt) } else { (nt, ns) };
+            (a, b, nr)
         } else {
-            (norm_src, norm_tgt, norm_rel)
+            (ns, nt, nr)
         };
 
-        if !seen_edges.insert(canonical_key) {
+        if !seen_edges.insert(dedup_key) {
             stats.duplicate_links += 1;
             continue;
         }
 
-        let link = Link::new(source.as_str(), target.as_str(), relation.as_str());
+        let mut link = Link::new(source.as_str(), target.as_str(), relation.as_str());
+        if is_directed {
+            link.directed = Some(true);
+        }
         links.push(link.clone());
         stats.link_count += 1;
 
