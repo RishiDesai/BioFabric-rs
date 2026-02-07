@@ -103,6 +103,19 @@ pub struct LayoutParams {
     ///
     /// - Java: `BioFabricNetwork.LinkGrouping`
     pub link_groups: Option<Vec<String>>,
+
+    /// Whether the HierDAG layout should point up (leaves at top).
+    ///
+    /// When `true` (default), leaves/sinks are placed first (top rows)
+    /// and roots are placed last (bottom rows). When `false`, roots are
+    /// placed first and leaves last.
+    ///
+    /// Used by [`HierDAGLayout`](crate::layout::HierDAGLayout).
+    ///
+    /// ## References
+    ///
+    /// - Java: `HierDAGLayout.pointUp_`
+    pub point_up: Option<bool>,
 }
 
 /// Trait for node layout algorithms.
