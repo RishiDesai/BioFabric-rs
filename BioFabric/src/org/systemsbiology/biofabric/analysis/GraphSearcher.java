@@ -151,7 +151,7 @@ public class GraphSearcher {
         }
       }
       NodeAndRel tar = new NodeAndRel(trg, relation);
-      Integer deg = retval0.get(trg);
+      Integer deg = retval0.get(tar);
       if (deg == null) {
         retval0.put(tar, Integer.valueOf(1));
       } else {
