@@ -484,10 +484,14 @@ fn run_eda_test(cfg: &ParityConfig) {
         run_default_layout(&network)
     };
 
-    // The Java GoldenGenerator always exports the full EDA (including shadows)
-    // regardless of the shadow display setting. The shadow toggle only affects
-    // the visual rendering, not the EDA export format.
-    let actual_eda = format_eda(&layout);
+    // For shadows-on tests, export the full EDA (including shadow links).
+    // For shadows-off tests, export only non-shadow links with
+    // column_no_shadows numbering.
+    let actual_eda = if cfg.shadows {
+        format_eda(&layout)
+    } else {
+        format_eda_no_shadows(&layout)
+    };
 
     assert_parity("EDA", &golden_eda, &actual_eda);
 }
@@ -1210,6 +1214,151 @@ fn generate_goldens() {
         } else {
             format_eda_no_shadows(&layout)
         };
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P3: Link grouping (4 variants) ----
+    let group_cases: Vec<(&str, &str, &[&str], &str)> = vec![
+        ("multi_relation.sif",      "multi_relation_pernode",              &["pp", "pd", "gi"],              "per_node"),
+        ("multi_relation.sif",      "multi_relation_pernetwork",           &["pp", "pd", "gi"],              "per_network"),
+        ("directed_triangle.gw",    "directed_triangle_gw_pernode",        &["activates", "inhibits"],       "per_node"),
+        ("directed_triangle.gw",    "directed_triangle_gw_pernetwork",     &["activates", "inhibits"],       "per_network"),
+    ];
+
+    for (input_file, golden_dirname, groups, mode_str) in &group_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (groups): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let mode = match *mode_str {
+            "per_node" => LayoutMode::PerNode,
+            "per_network" => LayoutMode::PerNetwork,
+            _ => LayoutMode::PerNode,
+        };
+        let group_strings: Vec<String> = groups.iter().map(|s| s.to_string()).collect();
+        let layout = run_layout_with_groups(&network, &group_strings, mode);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P11: Fixed node-order import (3 variants) ----
+    let fixed_noa_cases: Vec<(&str, &str, &str)> = vec![
+        ("triangle.sif",        "triangle_fixed_noa",        "triangle_reversed.noa"),
+        ("multi_relation.sif",  "multi_relation_fixed_noa",  "multi_relation_shuffled.noa"),
+        ("ba2K.sif",            "ba2K_fixed_noa",            "ba2K_reversed.noa"),
+    ];
+
+    for (input_file, golden_dirname, noa_filename) in &fixed_noa_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let noa_input = noa_file_path(noa_filename);
+        if !noa_input.exists() {
+            eprintln!("SKIP: NOA file not found: {}", noa_input.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (fixed NOA): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let node_order = parse_noa_format_file(&noa_input);
+        let layout = run_layout_with_node_order(&network, node_order);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P12: Subnetwork extraction (3 variants) ----
+    let extract_cases: Vec<(&str, &str, &[&str])> = vec![
+        ("triangle.sif",        "triangle_extract_AB",          &["A", "B"]),
+        ("multi_relation.sif",  "multi_relation_extract_ACE",   &["A", "C", "E"]),
+        ("dense_clique.sif",    "dense_clique_extract_ABC",     &["A", "B", "C"]),
+    ];
+
+    for (input_file, golden_dirname, extract_nodes) in &extract_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (extract): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let sub_network = extract_subnetwork(&network, extract_nodes);
+        let layout = run_default_layout(&sub_network);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
 
         std::fs::create_dir_all(&golden_path).unwrap();
         std::fs::write(&noa_path, &noa_content).unwrap();
