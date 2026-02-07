@@ -1380,6 +1380,23 @@ parity_test_align! { name: align_yeast_sc_s3_pure,          input: "Yeast2KReduc
 parity_test_align! { name: align_yeast_sc_importance_pure,  input: "Yeast2KReduced.sif", golden: "align_yeast_sc_importance_pure",  net2: "SC.sif", align: "yeast_sc_importance_pure.align" }
 parity_test_align! { name: align_yeast_sc_s3_050,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_050",           net2: "SC.sif", align: "yeast_sc_s3_050.align" }
 
+// --- Additional DesaiEtAl-2019 blend variants (full S3/importance curve) ---
+
+parity_test_align! { name: align_yeast_sc_s3_001,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_001",           net2: "SC.sif", align: "yeast_sc_s3_001.align" }
+parity_test_align! { name: align_yeast_sc_s3_003,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_003",           net2: "SC.sif", align: "yeast_sc_s3_003.align" }
+parity_test_align! { name: align_yeast_sc_s3_005,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_005",           net2: "SC.sif", align: "yeast_sc_s3_005.align" }
+parity_test_align! { name: align_yeast_sc_s3_010,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_010",           net2: "SC.sif", align: "yeast_sc_s3_010.align" }
+parity_test_align! { name: align_yeast_sc_s3_030,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_030",           net2: "SC.sif", align: "yeast_sc_s3_030.align" }
+parity_test_align! { name: align_yeast_sc_s3_100,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_100",           net2: "SC.sif", align: "yeast_sc_s3_100.align" }
+
+// --- BIF round-trip: DesaiEtAl publication files with populated annotations ---
+
+parity_test_roundtrip! { name: roundtrip_desai_iii_perfect,         golden: "roundtrip_desai_iii_perfect" }
+parity_test_roundtrip! { name: roundtrip_desai_iii_all_s3,          golden: "roundtrip_desai_iii_all_s3" }
+parity_test_roundtrip! { name: roundtrip_desai_iii_all_importance,  golden: "roundtrip_desai_iii_all_importance" }
+parity_test_roundtrip! { name: roundtrip_desai_iii_p05s3,           golden: "roundtrip_desai_iii_p05s3" }
+parity_test_roundtrip! { name: roundtrip_desai_iv,                  golden: "roundtrip_desai_iv" }
+
 // ===========================================================================
 //
 //  PHASE 17: Alignment view type variants
