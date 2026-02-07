@@ -90,6 +90,19 @@ pub struct LayoutParams {
     /// This affects edge ordering, link group annotations, and the
     /// comparator used by the default edge layout.
     pub layout_mode: LayoutMode,
+
+    /// Ordered list of link group relation types.
+    ///
+    /// When set, edges are grouped by relation type during layout. The
+    /// group index is determined by best-suffix-matching the link's relation
+    /// against this list. In `PerNode` mode, edges within each node's
+    /// incident set are grouped; in `PerNetwork` mode, edges are globally
+    /// grouped across the whole network.
+    ///
+    /// ## References
+    ///
+    /// - Java: `BioFabricNetwork.LinkGrouping`
+    pub link_groups: Option<Vec<String>>,
 }
 
 /// Trait for node layout algorithms.
