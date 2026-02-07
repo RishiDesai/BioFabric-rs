@@ -206,3 +206,176 @@ fn extract_dense_clique_abc() {
     // Extract {A,B,C} from K6: complete subgraph K3 = 3 edges
     run_extraction_test("dense_clique.sif", &["A", "B", "C"], 3, 3);
 }
+
+// ---------------------------------------------------------------------------
+// First-neighbor expansion tests
+// ---------------------------------------------------------------------------
+
+/// Test that getFirstNeighbors produces the expected neighbor set.
+#[allow(dead_code)]
+fn run_first_neighbors_test(input_file: &str, _node: &str, _expected_neighbors: &[&str]) {
+    let input = network_path(input_file);
+    assert!(input.exists(), "Input file not found: {}", input.display());
+
+    // TODO: Load the network
+    // let network = biofabric_core::io::sif::parse_file(&input).unwrap();
+
+    // TODO: Get first neighbors
+    // let neighbors = network.first_neighbors(node);
+    // let mut neighbor_names: Vec<&str> = neighbors.iter().map(|n| n.name()).collect();
+    // neighbor_names.sort();
+    // let mut expected: Vec<&str> = expected_neighbors.to_vec();
+    // expected.sort();
+    // assert_eq!(neighbor_names, expected,
+    //     "First neighbors mismatch for {}({})", input_file, node);
+
+    eprintln!("  First neighbors: STUB (implementation pending)");
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_triangle_a() {
+    // In triangle, A connects to B and C
+    run_first_neighbors_test("triangle.sif", "A", &["B", "C"]);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_triangle_b() {
+    // B connects to A and C
+    run_first_neighbors_test("triangle.sif", "B", &["A", "C"]);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_star_hub() {
+    // Hub node "0" connects to all 500 leaf nodes
+    // Just check count since listing 500 names is impractical
+    let input = network_path("star-500.sif");
+    assert!(input.exists());
+    // TODO: let network = parse...
+    // TODO: let neighbors = network.first_neighbors("0");
+    // TODO: assert_eq!(neighbors.len(), 500);
+    eprintln!("  First neighbors (star hub): STUB (implementation pending)");
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_star_leaf() {
+    // Leaf node "1" connects only to hub "0"
+    run_first_neighbors_test("star-500.sif", "1", &["0"]);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_isolated() {
+    // Isolated node "X" in isolated_nodes.sif has no neighbors
+    run_first_neighbors_test("isolated_nodes.sif", "X", &[]);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_self_loop() {
+    // Node A in self_loop.sif: connects to B, C, and has self-loop A→A
+    // First neighbors should include B and C (self-loop doesn't add A as its own neighbor)
+    run_first_neighbors_test("self_loop.sif", "A", &["B", "C"]);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing first-neighbor expansion"]
+fn first_neighbors_multi_relation() {
+    // Node A connects to B (pp), C (pd), E (gi) via multiple relation types
+    run_first_neighbors_test("multi_relation.sif", "A", &["B", "C", "E"]);
+}
+
+// ---------------------------------------------------------------------------
+// Alignment scoring tests
+// ---------------------------------------------------------------------------
+
+/// Test that alignment scoring produces the expected metric values.
+/// Scores are read from golden output.scores files (tab-separated: name\tvalue).
+#[allow(dead_code)]
+fn run_alignment_score_test(golden_dir: &str, _metric: &str, _expected_approx: f64) {
+    let scores_path = parity_root().join("goldens").join(golden_dir).join("output.scores");
+    if !scores_path.exists() {
+        eprintln!(
+            "SKIP: scores file not found at {}. Run golden generation first.",
+            scores_path.display()
+        );
+        return;
+    }
+
+    // TODO: Read the golden scores file
+    // TODO: Parse "metricName\tvalue" lines
+    // TODO: Find the requested metric
+    // TODO: Also compute the metric from the Rust alignment pipeline
+    // TODO: Compare within tolerance (1e-10)
+
+    eprintln!("  Alignment scoring: STUB (implementation pending)");
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_casestudy_iv_ec() {
+    run_alignment_score_test("align_casestudy_iv", "Edge Correctness", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_casestudy_iv_s3() {
+    run_alignment_score_test("align_casestudy_iv", "Symmetric Substructure Score", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_casestudy_iv_ics() {
+    run_alignment_score_test("align_casestudy_iv", "Induced Conserved Structure", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_perfect_ec() {
+    run_alignment_score_test("align_yeast_sc_perfect", "Edge Correctness", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_perfect_s3() {
+    run_alignment_score_test("align_yeast_sc_perfect", "Symmetric Substructure Score", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_perfect_ics() {
+    run_alignment_score_test("align_yeast_sc_perfect", "Induced Conserved Structure", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_perfect_nc() {
+    run_alignment_score_test("align_yeast_sc_perfect", "Node Correctness", 1.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_s3_pure_ec() {
+    run_alignment_score_test("align_yeast_sc_s3_pure", "Edge Correctness", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_s3_pure_s3() {
+    run_alignment_score_test("align_yeast_sc_s3_pure", "Symmetric Substructure Score", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_importance_pure_ec() {
+    run_alignment_score_test("align_yeast_sc_importance_pure", "Edge Correctness", 0.0);
+}
+
+#[test]
+#[ignore = "analysis: enable after implementing alignment scoring"]
+fn align_score_yeast_sc_importance_pure_s3() {
+    run_alignment_score_test("align_yeast_sc_importance_pure", "Symmetric Substructure Score", 0.0);
+}
