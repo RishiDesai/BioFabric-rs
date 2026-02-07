@@ -41,10 +41,13 @@
 
 import java.io.*;
 import java.util.*;
+import java.util.SortedMap;
 
 import org.systemsbiology.biofabric.app.BioFabricWindow;
 import org.systemsbiology.biofabric.api.io.AttributeKey;
 import org.systemsbiology.biofabric.api.io.Indenter;
+import org.systemsbiology.biofabric.api.layout.EdgeLayout;
+import org.systemsbiology.biofabric.api.layout.NodeLayout;
 import org.systemsbiology.biofabric.api.util.ExceptionHandler;
 import org.systemsbiology.biofabric.api.util.UniqueLabeller;
 import org.systemsbiology.biofabric.cmd.CommandSet;
@@ -52,12 +55,14 @@ import org.systemsbiology.biofabric.cmd.HeadlessOracle;
 import org.systemsbiology.biofabric.io.AttributeLoader;
 import org.systemsbiology.biofabric.io.BuildDataImpl;
 import org.systemsbiology.biofabric.layouts.ControlTopLayout;
+import org.systemsbiology.biofabric.layouts.NodeClusterLayout;
 import org.systemsbiology.biofabric.layouts.NodeSimilarityLayout;
 import org.systemsbiology.biofabric.layouts.SetLayout;
 import org.systemsbiology.biofabric.model.BioFabricNetwork;
+import org.systemsbiology.biofabric.api.model.AugRelation;
 import org.systemsbiology.biofabric.plugin.PlugInManager;
 import org.systemsbiology.biofabric.plugin.PluginSupportFactory;
-import org.systemsbiology.biofabric.plugin.PluginResourceManager;
+import org.systemsbiology.biofabric.api.util.PluginResourceManager;
 import org.systemsbiology.biofabric.ui.FabricDisplayOptions;
 import org.systemsbiology.biofabric.ui.FabricDisplayOptionsManager;
 import org.systemsbiology.biofabric.ui.display.BioFabricPanel;
@@ -65,6 +70,7 @@ import org.systemsbiology.biofabric.util.ResourceManager;
 
 import org.systemsbiology.biofabric.api.model.NetLink;
 import org.systemsbiology.biofabric.api.model.NetNode;
+import org.systemsbiology.biofabric.api.io.BuildData;
 import org.systemsbiology.biofabric.api.io.BuildExtractor;
 import org.systemsbiology.biofabric.io.FabricImportLoader;
 import org.systemsbiology.biofabric.io.SIFImportLoader;
@@ -77,8 +83,23 @@ import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentPlugIn;
 import org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentScorer;
 import org.systemsbiology.biofabric.plugin.core.align.NodeGroupMap;
 import org.systemsbiology.biofabric.analysis.GraphSearcher;
+import org.systemsbiology.biofabric.api.worker.BTProgressMonitor;
 
 public class GoldenGenerator {
+
+    /** No-op progress monitor for headless golden generation. */
+    private static final BTProgressMonitor NOOP_MONITOR = new BTProgressMonitor() {
+        private int total_ = 0;
+        private int progress_ = 0;
+        public void setTotal(int total) { total_ = total; }
+        public int getTotal() { return total_; }
+        public boolean updateUnknownProgress() { return true; }
+        public boolean updateProgress(int done) { progress_ = done; return true; }
+        public boolean updateProgressAndPhase(int done, String message) { progress_ = done; return true; }
+        public boolean updateRankings(SortedMap<Integer, Double> chartVals) { return true; }
+        public boolean keepGoing() { return true; }
+        public int getProgress() { return progress_; }
+    };
 
     // ---- Configuration ----
 
@@ -128,6 +149,9 @@ public class GoldenGenerator {
 
     // ---- Analysis mode ----
     private String analysis = null;          // comma-separated: connected_components,topo_sort,node_degree
+
+    // ---- BioFabric infrastructure (set during initialization) ----
+    private PlugInManager plum = null;
 
     public static void main(String[] argv) {
         if (argv.length < 2) {
@@ -333,7 +357,7 @@ public class GoldenGenerator {
         BioFabricWindow bfw = new BioFabricWindow(argMap, null, true, true);
         ExceptionHandler.getHandler().initializeForHeadless(false);
 
-        PlugInManager plum = new PlugInManager();
+        plum = new PlugInManager();
         CommandSet.initCmds("mainWindow", null, bfw, true, plum, new HeadlessOracle());
         bfw.initWindow(null);
         CommandSet cmd = CommandSet.getCmds("mainWindow");
@@ -347,7 +371,7 @@ public class GoldenGenerator {
             FabricDisplayOptions dop = dopmgr.getDisplayOptions();
             FabricDisplayOptions newDop = dop.clone();
             if (minDrainZone != null) {
-                newDop.setMinimumDrainZone(minDrainZone.intValue());
+                newDop.setMinDrainZone(minDrainZone.intValue());
                 System.out.println("Set minDrainZone = " + minDrainZone);
             }
             if (nodeLighter != null) {
@@ -417,7 +441,7 @@ public class GoldenGenerator {
 
             // Rebuild network with SHADOW_LINK_CHANGE mode to re-lay out edges
             BuildDataImpl bd = new BuildDataImpl(bfn, BuildDataImpl.BuildMode.SHADOW_LINK_CHANGE);
-            bfn = new BioFabricNetwork(bd, null);
+            bfn = new BioFabricNetwork(bd, plum, null);
 
             System.out.println("  Shadow toggle rebuild complete. Links now: " +
                                bfn.getLinkCount(false) + " (no shadows)");
@@ -441,7 +465,7 @@ public class GoldenGenerator {
             // Create build data with existing network + group configuration
             BuildDataImpl bd = new BuildDataImpl(bfn, bmode, null);
             bd.setGroupOrderAndMode(linkGroups, mode, true);
-            bfn = new BioFabricNetwork(bd, null);
+            bfn = new BioFabricNetwork(bd, plum, null);
 
             System.out.println("  Link group relayout complete.");
         }
@@ -470,7 +494,7 @@ public class GoldenGenerator {
 
             BuildDataImpl bd = new BuildDataImpl(bfn, BuildDataImpl.BuildMode.NODE_ATTRIB_LAYOUT, null);
             bd.setNodeOrderFromAttrib(attribs);
-            bfn = new BioFabricNetwork(bd, null);
+            bfn = new BioFabricNetwork(bd, plum, null);
 
             System.out.println("  Fixed node order applied.");
         }
@@ -493,8 +517,9 @@ public class GoldenGenerator {
             alod2.readAttributes(eda, false, attribs, nameToID, stats);
 
             BuildDataImpl bd = new BuildDataImpl(bfn, BuildDataImpl.BuildMode.LINK_ATTRIB_LAYOUT, null);
-            bd.setLinkOrderFromAttrib(attribs);
-            bfn = new BioFabricNetwork(bd, null);
+            SortedMap<Integer, NetLink> checkedOrder = bfn.checkNewLinkOrder(attribs);
+            bd.setLinkOrder(checkedOrder);
+            bfn = new BioFabricNetwork(bd, plum, null);
 
             System.out.println("  Fixed link order applied.");
         }
@@ -533,7 +558,7 @@ public class GoldenGenerator {
             }
 
             BuildDataImpl bd = new BuildDataImpl(bfn, subNodes, subLinks);
-            bfn = new BioFabricNetwork(bd, null);
+            bfn = new BioFabricNetwork(bd, plum, null);
 
             System.out.println("  Subnetwork extracted: " + bfn.getNodeCount() + " nodes, " +
                                bfn.getLinkCount(false) + " links");
@@ -555,7 +580,7 @@ public class GoldenGenerator {
             UniqueLabeller idGen1 = new UniqueLabeller();
             ArrayList<NetLink> linksG1 = new ArrayList<NetLink>();
             HashSet<NetNode> lonersG1 = new HashSet<NetNode>();
-            FabricImportLoader.ShadowStats sss1;
+            FabricImportLoader.FileImportStats sss1;
             String net1Lower = inputFile.getName().toLowerCase();
             if (net1Lower.endsWith(".gw")) {
                 sss1 = (new GWImportLoader()).importFabric(inputFile, idGen1, linksG1, lonersG1, null, null, null);
@@ -568,7 +593,7 @@ public class GoldenGenerator {
             UniqueLabeller idGen2 = new UniqueLabeller();
             ArrayList<NetLink> linksG2 = new ArrayList<NetLink>();
             HashSet<NetNode> lonersG2 = new HashSet<NetNode>();
-            FabricImportLoader.ShadowStats sss2;
+            FabricImportLoader.FileImportStats sss2;
             String net2Lower = net2File.getName().toLowerCase();
             if (net2Lower.endsWith(".gw")) {
                 sss2 = (new GWImportLoader()).importFabric(net2File, idGen2, linksG2, lonersG2, null, null, null);
@@ -582,7 +607,7 @@ public class GoldenGenerator {
 
             // Read alignment mapping
             String className = "org.systemsbiology.biofabric.plugin.core.align.NetworkAlignmentPlugIn";
-            PluginResourceManager rMan = new PluginResourceManager(className);
+            PluginResourceManager rMan = new ResourceManager.ForPlugins(className, plum);
             AlignmentLoader alod = new AlignmentLoader(className, rMan);
             Map<NetNode, NetNode> mapG1toG2 = new HashMap<NetNode, NetNode>();
             AlignmentLoader.NetAlignFileStats alignStats = new AlignmentLoader.NetAlignFileStats();
@@ -590,7 +615,8 @@ public class GoldenGenerator {
             System.out.println("  Alignment: " + mapG1toG2.size() + " mapped nodes");
 
             // Read perfect alignment (if provided, for NC/NGS/LGS/JS scoring)
-            Map<NetNode, NetNode> perfectG1toG2 = null;
+            // Use empty map (not null) to avoid NPE in JaccardSimilarity.makeInverseMap
+            Map<NetNode, NetNode> perfectG1toG2 = new HashMap<NetNode, NetNode>();
             if (perfectAlignFile != null) {
                 File perfectFile = new File(perfectAlignFile);
                 if (!perfectFile.exists()) throw new FileNotFoundException("Perfect align not found: " + perfectAlignFile);
@@ -639,13 +665,20 @@ public class GoldenGenerator {
 
             System.out.println("  Merged: " + mergedLinks.size() + " links, " + mergedLoners.size() + " loners");
 
-            // Compute alignment scores
-            // For perfect alignment: also merge the perfect alignment to get its color map
-            Set<NetLink> reducedLinks = new HashSet<NetLink>(mergedLinks);
+            // Preprocess merged links (extractRelations + assignDirections + preprocessLinks)
+            // This matches the flow in FileLoadFlowsImpl.handleDirectionsDupsAndShadows()
+            BuildExtractor bex2 = PluginSupportFactory.getBuildExtractor();
+            SortedMap<AugRelation, Boolean> mergedRelMap = new TreeMap<AugRelation, Boolean>();
+            bex2.extractRelations(mergedLinks, mergedRelMap, null);
+            bex2.assignDirections(mergedLinks, mergedRelMap, null);
+
+            Set<NetLink> reducedLinks = new HashSet<NetLink>();
+            Set<NetLink> culledLinks = new HashSet<NetLink>();
+            bex2.preprocessLinks(mergedLinks, reducedLinks, culledLinks, null);
             Set<NetNode> reducedLoners = new HashSet<NetNode>(mergedLoners);
 
-            Set<NetLink> reducedLinksPerfect = null;
-            Set<NetNode> reducedLonersPerfect = null;
+            Set<NetLink> reducedLinksPerfect = new HashSet<NetLink>();
+            Set<NetNode> reducedLonersPerfect = new HashSet<NetNode>();
             NetworkAlignment.NodeColorMap nodeColorMapPerfect = null;
 
             if (perfectG1toG2 != null) {
@@ -661,7 +694,13 @@ public class GoldenGenerator {
                     vt, new UniqueLabeller(), null);
                 naPerfect.mergeNetworks();
 
-                reducedLinksPerfect = new HashSet<NetLink>(mergedLinksPerfect);
+                // Preprocess perfect merged links
+                SortedMap<AugRelation, Boolean> perfectRelMap = new TreeMap<AugRelation, Boolean>();
+                bex2.extractRelations(mergedLinksPerfect, perfectRelMap, null);
+                bex2.assignDirections(mergedLinksPerfect, perfectRelMap, null);
+                reducedLinksPerfect = new HashSet<NetLink>();
+                Set<NetLink> perfectCulled = new HashSet<NetLink>();
+                bex2.preprocessLinks(mergedLinksPerfect, reducedLinksPerfect, perfectCulled, null);
                 reducedLonersPerfect = new HashSet<NetNode>(mergedLonersPerfect);
             }
 
@@ -697,12 +736,15 @@ public class GoldenGenerator {
 
             FabricColorGenerator colGen = new FabricColorGenerator();
             colGen.newColorModel();
-            nabd.setColorGen(colGen);
-            nabd.setIdGen(mergeIdGen);
-            nabd.setLinks(reducedLinks);
-            nabd.setLoneNodes(reducedLoners);
 
-            bfn = new BioFabricNetwork(nabd, null);
+            // Use PluginSupportFactory to create the BuildData wrapper
+            // (matches the pattern in NetworkAlignmentPlugIn.alignNetworks())
+            BuildData alignBd = PluginSupportFactory.getBuildDataForPlugin(
+                mergeIdGen, reducedLinks, reducedLoners,
+                new HashMap<NetNode, String>(), colGen);
+            alignBd.setPluginBuildData(nabd);
+
+            bfn = new BioFabricNetwork(alignBd, plum, null);
 
             System.out.println("  Alignment network built: " + bfn.getNodeCount() + " nodes, " +
                                bfn.getLinkCount(false) + " links");
@@ -757,6 +799,34 @@ public class GoldenGenerator {
     }
 
     /**
+     * Run the node layout algorithm and (if separate) edge layout on a BuildDataImpl,
+     * then construct the BioFabricNetwork. This matches the pattern in
+     * FileLoadFlowsImpl.expensiveModelOperations().
+     *
+     * @param params Layout-specific params (e.g., ResortParams, ClusterParams).
+     *               Pass null for layouts that don't need params.
+     */
+    private BioFabricNetwork runLayoutAndBuild(BuildDataImpl bd, NodeLayout.Params params) throws Exception {
+        if (bd.needsLayoutForRelayout()) {
+            NodeLayout nl = bd.getNodeLayout();
+            // Call criteriaMet for layouts that need it (e.g., SetLayout initializes
+            // internal state during criteriaMet)
+            try { nl.criteriaMet(bd, NOOP_MONITOR); } catch (Exception e) { /* ignore */ }
+            nl.doNodeLayout(bd, params, NOOP_MONITOR);
+            EdgeLayout el = bd.getEdgeLayout();
+            if (el != null) {
+                el.layoutEdges(bd, NOOP_MONITOR);
+            }
+        }
+        return new BioFabricNetwork(bd, plum, NOOP_MONITOR);
+    }
+
+    /** Convenience overload for layouts that don't need params. */
+    private BioFabricNetwork runLayoutAndBuild(BuildDataImpl bd) throws Exception {
+        return runLayoutAndBuild(bd, null);
+    }
+
+    /**
      * Apply a non-default layout algorithm to the loaded network.
      * This rebuilds the network using the appropriate BuildMode and parameters.
      */
@@ -769,16 +839,16 @@ public class GoldenGenerator {
                 System.out.println("Applying layout: NodeSimilarity (resort/reorder)...");
                 bmode = BuildDataImpl.BuildMode.REORDER_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
-                // ResortParams defaults: passCount=10, terminateAtIncrease=false
-                bfn = new BioFabricNetwork(bd, null);
+                // ResortParams(): passCount=10, terminateAtIncrease=false
+                bfn = runLayoutAndBuild(bd, new NodeSimilarityLayout.ResortParams());
                 break;
 
             case "similarity_clustered":
                 System.out.println("Applying layout: NodeSimilarity (clustered)...");
                 bmode = BuildDataImpl.BuildMode.CLUSTERED_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
-                // ClusterParams defaults: tolerance=0.0, chainLength=5, JACCARD
-                bfn = new BioFabricNetwork(bd, null);
+                // ClusterParams(): tolerance=0.0, chainLength=5, JACCARD
+                bfn = runLayoutAndBuild(bd, new NodeSimilarityLayout.ClusterParams());
                 break;
 
             case "hierdag":
@@ -786,7 +856,7 @@ public class GoldenGenerator {
                 bmode = BuildDataImpl.BuildMode.HIER_DAG_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
                 bd.setPointUp((pointUp != null) ? pointUp : Boolean.TRUE);
-                bfn = new BioFabricNetwork(bd, null);
+                bfn = runLayoutAndBuild(bd);
                 break;
 
             case "node_cluster":
@@ -830,7 +900,14 @@ public class GoldenGenerator {
                     }
                 }
                 bd.clustAssign = clustAssign;
-                bfn = new BioFabricNetwork(bd, null);
+                // NodeClusterLayout needs ClusterParams with cluster data
+                NodeClusterLayout.ClusterParams nclParams = new NodeClusterLayout.ClusterParams(
+                    NodeClusterLayout.ClusterParams.Source.STORED,
+                    NodeClusterLayout.ClusterParams.Order.NAME,
+                    NodeClusterLayout.ClusterParams.InterLink.BETWEEN,
+                    NodeClusterLayout.ClusterParams.ClustLayout.BREADTH_CONN_FIRST,
+                    null, clusterAttribs, clusterNameToNode, false);
+                bfn = runLayoutAndBuild(bd, nclParams);
                 break;
 
             case "control_top":
@@ -880,7 +957,7 @@ public class GoldenGenerator {
                 }
 
                 bd.setCTL(cMode, tMode, controlNodes, bfn);
-                bfn = new BioFabricNetwork(bd, null);
+                bfn = runLayoutAndBuild(bd);
                 break;
 
             case "set":
@@ -901,14 +978,14 @@ public class GoldenGenerator {
                     }
                 }
                 bd.setLinkMeaning(lm);
-                bfn = new BioFabricNetwork(bd, null);
+                bfn = runLayoutAndBuild(bd);
                 break;
 
             case "world_bank":
                 System.out.println("Applying layout: WorldBank...");
                 bmode = BuildDataImpl.BuildMode.WORLD_BANK_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
-                bfn = new BioFabricNetwork(bd, null);
+                bfn = runLayoutAndBuild(bd);
                 break;
 
             default:
@@ -943,6 +1020,11 @@ public class GoldenGenerator {
         // Build full node set from links + loners
         BuildExtractor bex = PluginSupportFactory.getBuildExtractor();
         Set<NetNode> allNodes = bex.extractNodes(rawLinks, loners, null);
+
+        // Resolve directionality before preprocessing (matches FileLoadFlowsImpl.preprocess())
+        SortedMap<AugRelation, Boolean> relMap = new TreeMap<AugRelation, Boolean>();
+        bex.extractRelations(rawLinks, relMap, null);
+        bex.assignDirections(rawLinks, relMap, null);
 
         // Preprocess: cull duplicates, keep the reduced set (includes shadows)
         Set<NetLink> reducedLinks = new HashSet<NetLink>();

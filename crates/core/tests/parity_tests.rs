@@ -330,11 +330,10 @@ fn run_eda_test(cfg: &ParityConfig) {
 
     let network = load_network(&input);
     let layout = run_default_layout(&network);
-    let actual_eda = if cfg.shadows {
-        format_eda(&layout)
-    } else {
-        format_eda_no_shadows(&layout)
-    };
+    // The Java GoldenGenerator always exports the full EDA (including shadows)
+    // regardless of the shadow display setting. The shadow toggle only affects
+    // the visual rendering, not the EDA export format.
+    let actual_eda = format_eda(&layout);
 
     assert_parity("EDA", &golden_eda, &actual_eda);
 }
