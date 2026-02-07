@@ -786,7 +786,8 @@ if no_only_filter || $ONLY_ALIGN; then
 
     # Case Studies I-III: Yeast2KReduced vs SC (SIF + SIF, 2379-node alignment)
     # Perfect alignment is used as reference for NC/NGS/LGS/JS scoring
-    for variant in perfect s3_pure importance_pure s3_050; do
+    # Includes all 10 DesaiEtAl-2019 blend variants across the S3/importance tradeoff curve
+    for variant in perfect s3_pure importance_pure s3_050 s3_001 s3_003 s3_005 s3_010 s3_030 s3_100; do
         if [ -z "$FILTER" ] || [ "$FILTER" = "yeast_sc" ] || [ "$FILTER" = "align" ]; then
             TOTAL=$((TOTAL + 1))
             echo -n "  [$TOTAL] align_yeast_sc_${variant} ... "
@@ -944,6 +945,58 @@ if no_only_filter || $ONLY_ALIGN; then
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi
 
+    echo
+fi
+
+# =========================================================================
+# Phase 16b: BIF round-trip with DesaiEtAl publication files (populated annotations)
+# =========================================================================
+
+if no_only_filter || $ONLY_ALIGN; then
+    echo "=== Phase 16b: BIF round-trip (DesaiEtAl publication files) ==="
+    echo
+
+    # These BIF files from the publication contain populated nodeAnnotations,
+    # linkAnnotations, shadowLinkAnnotations, and plugInDataSets.
+    # Round-trip: load BIF → re-export BIF → compare byte-for-byte.
+    #
+    # The golden IS the input — we copy the publication BIF into the golden dir
+    # as output.bif, then the Rust test loads it and re-exports for comparison.
+
+    BIF_DIR="$NETWORKS_DIR/bif"
+    if [ -d "$BIF_DIR" ]; then
+        # Case Study III: representative files with populated annotations
+        for bifname in CaseStudy-III-Perfect CaseStudy-III-All-S3 CaseStudy-III-All-Importance CaseStudy-III-p05S3p95Imp; do
+            [ -f "$BIF_DIR/${bifname}.bif" ] || continue
+            case "$bifname" in
+                CaseStudy-III-Perfect)         suffix="roundtrip_desai_iii_perfect" ;;
+                CaseStudy-III-All-S3)          suffix="roundtrip_desai_iii_all_s3" ;;
+                CaseStudy-III-All-Importance)  suffix="roundtrip_desai_iii_all_importance" ;;
+                CaseStudy-III-p05S3p95Imp)     suffix="roundtrip_desai_iii_p05s3" ;;
+            esac
+            [ -n "$FILTER" ] && [ "$FILTER" != "roundtrip" ] && [ "$FILTER" != "desai" ] && continue
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${suffix} ... "
+            local_golden_dir="$GOLDENS_DIR/$suffix"
+            mkdir -p "$local_golden_dir"
+            cp "$BIF_DIR/${bifname}.bif" "$local_golden_dir/output.bif"
+            echo "OK (copied publication BIF as golden)"
+            OK=$((OK + 1))
+        done
+
+        # Case Study IV: cycle annotations
+        if [ -z "$FILTER" ] || [ "$FILTER" = "roundtrip" ] || [ "$FILTER" = "desai" ]; then
+            if [ -f "$BIF_DIR/CaseStudy-IV.bif" ]; then
+                TOTAL=$((TOTAL + 1))
+                echo -n "  [$TOTAL] roundtrip_desai_iv ... "
+                local_golden_dir="$GOLDENS_DIR/roundtrip_desai_iv"
+                mkdir -p "$local_golden_dir"
+                cp "$BIF_DIR/CaseStudy-IV.bif" "$local_golden_dir/output.bif"
+                echo "OK (copied publication BIF as golden)"
+                OK=$((OK + 1))
+            fi
+        fi
+    fi
     echo
 fi
 
