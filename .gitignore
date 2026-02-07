@@ -13,3 +13,4 @@ Cargo.lock
 
 # Test artifacts
 *.log
+**/__pycache__/
