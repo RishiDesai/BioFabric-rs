@@ -81,57 +81,105 @@ pub fn parse_reader_with_stats<R: Read>(
     reader: BufReader<R>,
 ) -> Result<(Network, ImportStats), ParseError> {
     let mut stats = ImportStats::new();
-    let mut links: Vec<Link> = Vec::new();
+
+    // Case-insensitive node name normalization (like Java's DataUtil.normKey).
+    // Maps uppercase(name) → first-seen original-case name.
+    let mut norm_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    let normalize = |name: &str, map: &mut std::collections::HashMap<String, String>| -> String {
+        let norm = name.to_uppercase().replace(' ', "");
+        map.entry(norm).or_insert_with(|| name.to_string()).clone()
+    };
+
+    // Phase 1: Parse all lines, collecting raw (normalized) links and lone nodes.
+    // Links are stored as (source, relation, target) with normalized node names.
+    let mut raw_links: Vec<(String, String, String)> = Vec::new();
     let mut lone_node_names: Vec<String> = Vec::new();
 
     for line_result in reader.lines() {
         let line = line_result?;
-        let trimmed = line.trim();
 
-        // Skip empty lines
-        if trimmed.is_empty() {
+        // Skip completely empty lines (after trim)
+        if line.trim().is_empty() {
             continue;
         }
 
-        // Split by tab first; if only 1 token and no tab, split by space
-        let tokens: Vec<&str> = if trimmed.contains('\t') {
-            trimmed.split('\t').collect()
+        // Split the ORIGINAL line by tab (not trimmed).
+        // Java: `line.split("\\t")` operates on untrimmed line.
+        // If only 1 token and no tab found, split by space.
+        let tokens: Vec<&str> = if line.contains('\t') {
+            line.split('\t').collect()
         } else {
-            trimmed.split_whitespace().collect()
+            line.split_whitespace().collect()
         };
 
         match tokens.len() {
             3 => {
-                let source = strip_quotes(tokens[0]);
-                let relation = strip_quotes(tokens[1]);
-                let target = strip_quotes(tokens[2]);
-
-                let link = Link::new(source, target, relation);
-                let is_feedback = link.is_feedback();
-
-                // Add the regular link
-                links.push(link.clone());
-                stats.link_count += 1;
-
-                // Add inline shadow if not self-loop
-                if !is_feedback {
-                    if let Some(shadow) = link.to_shadow() {
-                        links.push(shadow);
-                        stats.shadow_link_count += 1;
-                    }
-                }
+                let source = normalize(strip_quotes(tokens[0]), &mut norm_names);
+                let relation = strip_quotes(tokens[1]).to_string();
+                let target = normalize(strip_quotes(tokens[2]), &mut norm_names);
+                raw_links.push((source, relation, target));
             }
             1 => {
-                let node_name = strip_quotes(tokens[0]);
-                lone_node_names.push(node_name.to_string());
+                let name = normalize(strip_quotes(tokens[0]), &mut norm_names);
+                lone_node_names.push(name);
             }
             _ => {
-                stats.bad_lines.push(trimmed.to_string());
+                stats.bad_lines.push(line.to_string());
             }
         }
     }
 
-    // Build the network: add all links in order, then lone nodes
+    // Phase 2: Preprocess links — deduplicate and remove undirected reverse pairs.
+    // This matches Java's BuildExtractorImpl.preprocessLinks():
+    // - Exact duplicates (same src, tgt, rel) → culled
+    // - For undirected non-feedback links, if both (A→B) and (B→A) exist, keep first-seen
+    //
+    // We track seen edges using a canonical form (sorted pair) for undirected dedup,
+    // but preserve the original link direction from the first occurrence.
+    let mut seen_edges: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+    let mut links: Vec<Link> = Vec::new();
+
+    for (source, relation, target) in raw_links {
+        let is_feedback = source == target;
+
+        // For undirected non-feedback links, use canonical (sorted) key
+        // to catch both A→B and B→A as the same edge.
+        // Use normKey (uppercase + no spaces) for consistent comparison.
+        let norm_src = source.to_uppercase().replace(' ', "");
+        let norm_tgt = target.to_uppercase().replace(' ', "");
+        let norm_rel = relation.to_uppercase().replace(' ', "");
+        let canonical_key = if !is_feedback {
+            let (a, b) = if norm_src <= norm_tgt {
+                (norm_src, norm_tgt)
+            } else {
+                (norm_tgt, norm_src)
+            };
+            (a, b, norm_rel)
+        } else {
+            (norm_src, norm_tgt, norm_rel)
+        };
+
+        if !seen_edges.insert(canonical_key) {
+            stats.duplicate_links += 1;
+            continue;
+        }
+
+        let link = Link::new(source.as_str(), target.as_str(), relation.as_str());
+        links.push(link.clone());
+        stats.link_count += 1;
+
+        // Add inline shadow if not self-loop
+        if !is_feedback {
+            if let Some(shadow) = link.to_shadow() {
+                links.push(shadow);
+                stats.shadow_link_count += 1;
+            }
+        }
+    }
+
+    // Phase 3: Build the network
     let mut network = Network::with_capacity(0, links.len());
     for link in links {
         network.add_link(link);

@@ -68,20 +68,79 @@ impl LinkGroupIndex {
     /// * `links` — All links in the network
     /// * `node_order` — Nodes in row order (index = row number)
     pub fn build(links: &[Link], node_order: &[NodeId]) -> Self {
-        // TODO: Implement link group index building
-        //
-        // Algorithm:
-        // 1. Build a node -> row lookup
-        // 2. For each node in row order:
-        //    a. Collect all incident links for this node
-        //    b. Group by relation type
-        //    c. For each relation group, create a LinkGroup entry
-        //    d. Record the canonical order
-        //
-        // The canonical order determines how link groups are compared
-        // in the edge comparator (see LinkSortKey below).
-        //
-        todo!("Implement link group index building")
+        let node_to_row: HashMap<NodeId, usize> = node_order
+            .iter()
+            .enumerate()
+            .map(|(row, id)| (id.clone(), row))
+            .collect();
+
+        let mut groups: HashMap<(NodeId, String), LinkGroup> = HashMap::new();
+        let mut order: Vec<(NodeId, String)> = Vec::new();
+        let mut seen_keys: std::collections::HashSet<(NodeId, String)> = std::collections::HashSet::new();
+
+        // For each node in row order, collect incident links grouped by relation
+        for node_id in node_order {
+            // Collect relations in encounter order for this node
+            let mut relation_order: Vec<String> = Vec::new();
+            let mut relation_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+            for (i, link) in links.iter().enumerate() {
+                // Check if this link is incident to the current node
+                let is_incident = &link.source == node_id || &link.target == node_id;
+                if !is_incident {
+                    continue;
+                }
+
+                // Determine the "top" node (lower row) for this link
+                let src_row = node_to_row.get(&link.source).copied().unwrap_or(0);
+                let tgt_row = node_to_row.get(&link.target).copied().unwrap_or(0);
+                let top_node = if src_row <= tgt_row {
+                    &link.source
+                } else {
+                    &link.target
+                };
+
+                // For regular links, the anchor is the top node
+                // For shadow links, the anchor is the bottom node
+                let anchor_node = if link.is_shadow {
+                    if src_row >= tgt_row {
+                        &link.source
+                    } else {
+                        &link.target
+                    }
+                } else {
+                    top_node
+                };
+
+                // Only process links where this node is the anchor
+                if anchor_node != node_id {
+                    continue;
+                }
+
+                let key = (node_id.clone(), link.relation.clone());
+                if !relation_set.contains(&link.relation) {
+                    relation_set.insert(link.relation.clone());
+                    relation_order.push(link.relation.clone());
+                }
+
+                let group = groups.entry(key.clone()).or_insert_with(|| LinkGroup {
+                    node: node_id.clone(),
+                    relation: link.relation.clone(),
+                    link_indices: Vec::new(),
+                });
+                group.link_indices.push(i);
+            }
+
+            // Add to canonical order
+            for relation in relation_order {
+                let key = (node_id.clone(), relation);
+                if seen_keys.insert(key.clone()) {
+                    order.push(key);
+                }
+            }
+        }
+
+        Self { groups, order }
     }
 
     /// Get the ordinal position of a link group.

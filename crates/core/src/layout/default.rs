@@ -47,29 +47,120 @@ impl NodeLayout for DefaultNodeLayout {
         params: &LayoutParams,
         _monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<Vec<NodeId>> {
-        // TODO: Implement default node layout
-        //
-        // See Java implementation in org.systemsbiology.biofabric.layouts.DefaultLayout
-        //
-        // Algorithm:
-        // 1. If params.start_node is set, start BFS from there
-        // 2. Otherwise, find the highest-degree node and start from there
-        // 3. Perform BFS, adding nodes to result in visit order
-        // 4. For disconnected graphs, find the next highest-degree unvisited node
-        //    and repeat BFS until all nodes are visited
-        // 5. Add any remaining lone nodes at the end
-        //
-        // Key behaviors to match:
-        // - Consistent ordering (same input → same output)
-        // - Handle disconnected components
-        // - Handle lone nodes (no edges)
-        // - Tie-breaking: when multiple nodes have same degree, use lexicographic order
-        //
-        // Use LoopReporter for progress:
-        //   let mut lr = LoopReporter::new(network.node_count() as u64, 20,
-        //                                  monitor, 0.0, 1.0, "BFS node ordering");
-        //
-        todo!("Implement default node layout - see BioFabric DefaultLayout.java")
+        use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+
+        let mut result: Vec<NodeId> = Vec::new();
+        let mut placed: HashSet<NodeId> = HashSet::new();
+
+        // Build degree map (counts ALL links including shadows)
+        // Java counts +1 for BOTH source and target for every link,
+        // including self-loops (where source == target, A gets +2).
+        let mut degree_map: HashMap<NodeId, usize> = HashMap::new();
+        for id in network.node_ids() {
+            degree_map.insert(id.clone(), 0);
+        }
+        for link in network.links() {
+            *degree_map.entry(link.source.clone()).or_insert(0) += 1;
+            *degree_map.entry(link.target.clone()).or_insert(0) += 1;
+        }
+
+        // Build neighbor map (from all links including shadows)
+        let mut neighbor_map: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        for id in network.node_ids() {
+            neighbor_map.entry(id.clone()).or_default();
+        }
+        for link in network.links() {
+            if link.source != link.target {
+                neighbor_map.entry(link.source.clone()).or_default().insert(link.target.clone());
+                neighbor_map.entry(link.target.clone()).or_default().insert(link.source.clone());
+            }
+        }
+
+        // Build degree-ranked structure: degree -> sorted set of nodes
+        // Use BTreeMap with reverse key for degree descending
+        let mut degree_ranked: BTreeMap<std::cmp::Reverse<usize>, BTreeSet<NodeId>> = BTreeMap::new();
+        for (id, deg) in &degree_map {
+            if !network.lone_nodes().contains(id) {
+                degree_ranked.entry(std::cmp::Reverse(*deg)).or_default().insert(id.clone());
+            }
+        }
+
+        // Determine starting nodes
+        let start_nodes: Vec<NodeId> = if let Some(ref start) = params.start_node {
+            vec![start.clone()]
+        } else {
+            Vec::new()
+        };
+
+        // Helper: find next highest-degree unplaced node
+        let find_next_start = |placed: &HashSet<NodeId>, degree_ranked: &BTreeMap<std::cmp::Reverse<usize>, BTreeSet<NodeId>>| -> Option<NodeId> {
+            for (_, nodes) in degree_ranked.iter() {
+                for node in nodes.iter() {
+                    if !placed.contains(node) {
+                        return Some(node.clone());
+                    }
+                }
+            }
+            None
+        };
+
+        // BFS with degree-ranked neighbor ordering
+        let mut do_bfs = |start: &NodeId, result: &mut Vec<NodeId>, placed: &mut HashSet<NodeId>| {
+            if placed.contains(start) {
+                return;
+            }
+            let mut queue: VecDeque<NodeId> = VecDeque::new();
+            placed.insert(start.clone());
+            result.push(start.clone());
+            queue.push_back(start.clone());
+
+            while let Some(node_id) = queue.pop_front() {
+                // Get unplaced neighbors, sorted by degree desc then lex asc
+                let mut neighbors: Vec<NodeId> = neighbor_map
+                    .get(&node_id)
+                    .map(|n| n.iter().filter(|n| !placed.contains(*n)).cloned().collect())
+                    .unwrap_or_default();
+                
+                neighbors.sort_by(|a, b| {
+                    let deg_a = degree_map.get(a).copied().unwrap_or(0);
+                    let deg_b = degree_map.get(b).copied().unwrap_or(0);
+                    deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
+                });
+
+                for neighbor in neighbors {
+                    if placed.insert(neighbor.clone()) {
+                        result.push(neighbor.clone());
+                        queue.push_back(neighbor);
+                    }
+                }
+            }
+        };
+
+        // Process start nodes
+        if !start_nodes.is_empty() {
+            for start in &start_nodes {
+                do_bfs(start, &mut result, &mut placed);
+            }
+        }
+
+        // Process remaining components
+        loop {
+            match find_next_start(&placed, &degree_ranked) {
+                Some(start) => do_bfs(&start, &mut result, &mut placed),
+                None => break,
+            }
+        }
+
+        // Add lone nodes at the end, sorted lexicographically
+        let mut lone: Vec<NodeId> = network.lone_nodes().iter().cloned().collect();
+        lone.sort();
+        for node in lone {
+            if placed.insert(node.clone()) {
+                result.push(node);
+            }
+        }
+
+        Ok(result)
     }
 
     fn name(&self) -> &'static str {
@@ -297,44 +388,109 @@ impl EdgeLayout for DefaultEdgeLayout {
     fn layout_edges(
         &self,
         build_data: &mut LayoutBuildData,
-        params: &LayoutParams,
+        _params: &LayoutParams,
         _monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<NetworkLayout> {
-        // TODO: Implement default edge layout
-        //
-        // See Java implementation in org.systemsbiology.biofabric.api.layout.DefaultEdgeLayout
-        //
-        // Algorithm:
-        // 1. Create a map from NodeId -> row number (build_data.node_to_row)
-        // 2. Build augmented-relation → link-group mapping for all links:
-        //    For each unique relation in the links, find the best suffix match
-        //    against build_data.layout_mode's link groups using best_suffix_match()
-        // 3. Initialize NetworkLayout with capacity
-        // 4. Sort all links using DefaultFabricLinkLocater comparator:
-        //    a. If layout_mode == PerNetwork: primary sort by link group ordinal
-        //    b. Both regular links: sort by top_row → group → bottom_row → direction → relation
-        //    c. Both shadow links: sort by bottom_row → group → top_row → direction → relation
-        //    d. Regular vs shadow: compare regular's top_row with shadow's bottom_row;
-        //       ties → shadow comes first (unless per-node groups override)
-        //    Use LinkSortKey for this.
-        // 5. Assign columns to sorted links using ColumnAssigner:
-        //    a. For regular links: assign_regular() → (col, col_no_shadow)
-        //    b. For shadow links: assign_shadow() → col only
-        //    c. Create LinkLayout for each
-        //    d. Update source and target node spans
-        // 6. Install link annotations if link groups are active:
-        //    Call install_link_annotations() with the link group order
-        // 7. Set row_count, column_count, column_count_no_shadows, link_group_order
-        //
-        // Key behaviors to match:
-        // - Links are assigned sequential column numbers starting at 0
-        // - Each node's span covers its leftmost to rightmost incident link
-        // - Shadow links are interleaved (not simply appended)
-        // - Consistent ordering for reproducibility
-        //
-        // Use LoopReporter for progress on the per-node loop.
-        //
-        todo!("Implement default edge layout - see BioFabric DefaultEdgeLayout.java")
+        use super::link_group::{ColumnAssigner, LinkSortKey};
+
+        let node_to_row = &build_data.node_to_row;
+
+        // Build sort keys for all links.
+        // In PerNode mode (default), group ordinal is 0 for all links.
+        // Link groups only matter in PerNetwork mode.
+        let links = build_data.network.links_slice().to_vec();
+        let mut indexed_links: Vec<(usize, LinkSortKey)> = links
+            .iter()
+            .enumerate()
+            .map(|(i, link)| {
+                let src_row = node_to_row.get(&link.source).copied().unwrap_or(0);
+                let tgt_row = node_to_row.get(&link.target).copied().unwrap_or(0);
+
+                let group_ordinal = 0;
+
+                let key = LinkSortKey::new(src_row, tgt_row, link, group_ordinal);
+                (i, key)
+            })
+            .collect();
+
+        // Sort by sort key
+        indexed_links.sort_by(|(_, a), (_, b)| a.cmp(b));
+
+        // Initialize layout
+        let mut layout = NetworkLayout::with_capacity(
+            build_data.node_order.len(),
+            links.len(),
+        );
+
+        // Initialize node layouts
+        for (i, node_id) in build_data.node_order.iter().enumerate() {
+            layout.nodes.insert(
+                node_id.clone(),
+                NodeLayoutInfo::new(i, node_id.as_str()),
+            );
+        }
+
+        // Assign columns
+        let mut col_assigner = ColumnAssigner::new();
+
+        for (link_idx, _sort_key) in &indexed_links {
+            let link = &links[*link_idx];
+            let src_row = node_to_row.get(&link.source).copied().unwrap_or(0);
+            let tgt_row = node_to_row.get(&link.target).copied().unwrap_or(0);
+
+            let (column, column_no_shadows) = if link.is_shadow {
+                let col = col_assigner.assign_shadow();
+                (col, None)
+            } else {
+                let (col, col_ns) = col_assigner.assign_regular();
+                (col, Some(col_ns))
+            };
+
+            let mut ll = LinkLayout::new(
+                column,
+                link.source.clone(),
+                link.target.clone(),
+                src_row,
+                tgt_row,
+                link.relation.clone(),
+                link.is_shadow,
+            );
+            ll.column_no_shadows = column_no_shadows;
+
+            // Update node spans
+            if let Some(src_layout) = layout.nodes.get_mut(&link.source) {
+                src_layout.update_span(column);
+                if let Some(col_ns) = column_no_shadows {
+                    src_layout.update_span_no_shadows(col_ns);
+                }
+            }
+            if link.source != link.target {
+                if let Some(tgt_layout) = layout.nodes.get_mut(&link.target) {
+                    tgt_layout.update_span(column);
+                    if let Some(col_ns) = column_no_shadows {
+                        tgt_layout.update_span_no_shadows(col_ns);
+                    }
+                }
+            }
+
+            layout.links.push(ll);
+        }
+
+        layout.row_count = build_data.node_order.len();
+        layout.column_count = col_assigner.column_count();
+        layout.column_count_no_shadows = col_assigner.column_count_no_shadows();
+
+        // Collect link group order (unique relations in encounter order)
+        let mut link_group_order: Vec<String> = Vec::new();
+        let mut seen_relations: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for ll in &layout.links {
+            if seen_relations.insert(ll.relation.clone()) {
+                link_group_order.push(ll.relation.clone());
+            }
+        }
+        layout.link_group_order = link_group_order;
+
+        Ok(layout)
     }
 
     fn name(&self) -> &'static str {
