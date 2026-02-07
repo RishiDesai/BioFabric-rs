@@ -47,7 +47,7 @@ impl NodeLayout for DefaultNodeLayout {
         params: &LayoutParams,
         _monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<Vec<NodeId>> {
-        use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+        use std::collections::{HashSet, VecDeque};
 
         let mut result: Vec<NodeId> = Vec::new();
         let mut placed: HashSet<NodeId> = HashSet::new();
@@ -76,14 +76,23 @@ impl NodeLayout for DefaultNodeLayout {
             }
         }
 
-        // Build degree-ranked structure: degree -> sorted set of nodes
-        // Use BTreeMap with reverse key for degree descending
-        let mut degree_ranked: BTreeMap<std::cmp::Reverse<usize>, BTreeSet<NodeId>> = BTreeMap::new();
-        for (id, deg) in &degree_map {
-            if !network.lone_nodes().contains(id) {
-                degree_ranked.entry(std::cmp::Reverse(*deg)).or_default().insert(id.clone());
-            }
-        }
+        // Java's NID.WithName.compareTo: compares by name (case-sensitive) first,
+        // then by NID as tiebreaker. Since NodeId::Ord already does case-sensitive
+        // lexicographic comparison on the name string, this matches our NodeId ordering.
+        // Degree-ranked comparator: degree desc, then name asc (via NodeId::Ord).
+        let node_cmp = |a: &NodeId, b: &NodeId| -> std::cmp::Ordering {
+            let deg_a = degree_map.get(a).copied().unwrap_or(0);
+            let deg_b = degree_map.get(b).copied().unwrap_or(0);
+            deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
+        };
+
+        // Build degree-ranked list of non-lone nodes
+        let mut ranked_nodes: Vec<NodeId> = network
+            .node_ids()
+            .filter(|id| !network.lone_nodes().contains(*id))
+            .cloned()
+            .collect();
+        ranked_nodes.sort_by(|a, b| node_cmp(a, b));
 
         // Determine starting nodes
         let start_nodes: Vec<NodeId> = if let Some(ref start) = params.start_node {
@@ -92,16 +101,9 @@ impl NodeLayout for DefaultNodeLayout {
             Vec::new()
         };
 
-        // Helper: find next highest-degree unplaced node
-        let find_next_start = |placed: &HashSet<NodeId>, degree_ranked: &BTreeMap<std::cmp::Reverse<usize>, BTreeSet<NodeId>>| -> Option<NodeId> {
-            for (_, nodes) in degree_ranked.iter() {
-                for node in nodes.iter() {
-                    if !placed.contains(node) {
-                        return Some(node.clone());
-                    }
-                }
-            }
-            None
+        // Helper: find next highest-degree unplaced node from the ranked list
+        let find_next_start = |placed: &HashSet<NodeId>, ranked: &[NodeId]| -> Option<NodeId> {
+            ranked.iter().find(|n| !placed.contains(n)).cloned()
         };
 
         // BFS with degree-ranked neighbor ordering
@@ -115,17 +117,13 @@ impl NodeLayout for DefaultNodeLayout {
             queue.push_back(start.clone());
 
             while let Some(node_id) = queue.pop_front() {
-                // Get unplaced neighbors, sorted by degree desc then lex asc
+                // Get unplaced neighbors, sorted by degree desc then name asc
                 let mut neighbors: Vec<NodeId> = neighbor_map
                     .get(&node_id)
                     .map(|n| n.iter().filter(|n| !placed.contains(*n)).cloned().collect())
                     .unwrap_or_default();
-                
-                neighbors.sort_by(|a, b| {
-                    let deg_a = degree_map.get(a).copied().unwrap_or(0);
-                    let deg_b = degree_map.get(b).copied().unwrap_or(0);
-                    deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
-                });
+
+                neighbors.sort_by(|a, b| node_cmp(a, b));
 
                 for neighbor in neighbors {
                     if placed.insert(neighbor.clone()) {
@@ -145,13 +143,13 @@ impl NodeLayout for DefaultNodeLayout {
 
         // Process remaining components
         loop {
-            match find_next_start(&placed, &degree_ranked) {
+            match find_next_start(&placed, &ranked_nodes) {
                 Some(start) => do_bfs(&start, &mut result, &mut placed),
                 None => break,
             }
         }
 
-        // Add lone nodes at the end, sorted lexicographically
+        // Add lone nodes at the end, sorted by name (matching Java's TreeSet<NetNode>)
         let mut lone: Vec<NodeId> = network.lone_nodes().iter().cloned().collect();
         lone.sort();
         for node in lone {
