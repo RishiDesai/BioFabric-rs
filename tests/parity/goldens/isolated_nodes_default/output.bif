@@ -1,0 +1,121 @@
+<BioFabric>
+  <colors>
+    <colorSet usage="nodes">
+      <color color="EX-yellow" r="255" g="203" b="0" />
+      <color color="EX-purple" r="146" g="73" b="255" />
+      <color color="EX-magenta" r="255" g="0" b="255" />
+      <color color="EX-pale-cyan" r="197" g="255" b="255" />
+      <color color="EX-dark-yellow-green" r="164" g="183" b="0" />
+      <color color="EX-pale-purple" r="213" g="236" b="255" />
+      <color color="EX-dark-red" r="200" g="80" b="80" />
+      <color color="EX-yellow-green" r="220" g="255" b="0" />
+      <color color="EX-pale-blue" r="146" g="255" b="255" />
+      <color color="EX-dark-purple" r="110" g="80" b="200" />
+      <color color="EX-pale-blue-magenta" r="209" g="146" b="255" />
+      <color color="EX-pale-red" r="255" g="146" b="219" />
+      <color color="EX-blue" r="0" g="217" b="255" />
+      <color color="EX-dark-green" r="56" g="183" b="0" />
+      <color color="EX-pale-green" r="190" g="255" b="146" />
+      <color color="EX-red" r="255" g="0" b="0" />
+      <color color="EX-cyan" r="0" g="255" b="255" />
+      <color color="EX-pale-yellow orange" r="204" g="175" b="102" />
+      <color color="EX-pale-magenta" r="255" g="197" b="255" />
+      <color color="EX-pale-red-orange" r="255" g="223" b="197" />
+      <color color="EX-blue-magenta" r="220" g="0" b="255" />
+      <color color="EX-orange" r="255" g="147" b="0" />
+      <color color="EX-dark-orange" r="183" g="132" b="0" />
+      <color color="EX-green" r="1" g="255" b="0" />
+      <color color="EX-medium-magenta" r="237" g="119" b="237" />
+      <color color="EX-dark-magenta" r="146" g="0" b="183" />
+      <color color="EX-yellow-orange" r="255" g="219" b="0" />
+      <color color="EX-pale-yellow-green" r="221" g="230" b="138" />
+      <color color="EX-dark-gray-purple" r="0" g="36" b="183" />
+      <color color="EX-dark-cyan" r="0" g="144" b="183" />
+      <color color="EX-dark-tan" r="237" g="190" b="119" />
+      <color color="EX-pure-blue" r="1" g="0" b="255" />
+    </colorSet>
+    <colorSet usage="links">
+      <color color="EX-yellow" r="178" g="142" b="0" />
+      <color color="EX-purple" r="71" g="36" b="178" />
+      <color color="EX-magenta" r="178" g="0" b="178" />
+      <color color="EX-pale-cyan" r="97" g="161" b="127" />
+      <color color="EX-dark-yellow-green" r="80" g="90" b="0" />
+      <color color="EX-pale-purple" r="104" g="115" b="161" />
+      <color color="EX-dark-red" r="98" g="39" b="39" />
+      <color color="EX-yellow-green" r="108" g="178" b="0" />
+      <color color="EX-pale-blue" r="71" g="128" b="143" />
+      <color color="EX-dark-purple" r="54" g="39" b="98" />
+      <color color="EX-pale-blue-magenta" r="102" g="71" b="143" />
+      <color color="EX-pale-red" r="143" g="71" b="107" />
+      <color color="EX-blue" r="0" g="106" b="178" />
+      <color color="EX-dark-green" r="27" g="90" b="0" />
+      <color color="EX-pale-green" r="93" g="143" b="71" />
+      <color color="EX-red" r="178" g="0" b="0" />
+      <color color="EX-cyan" r="0" g="178" b="178" />
+      <color color="EX-pale-yellow orange" r="143" g="122" b="71" />
+      <color color="EX-pale-magenta" r="148" g="97" b="161" />
+      <color color="EX-pale-red-orange" r="161" g="109" b="97" />
+      <color color="EX-blue-magenta" r="108" g="0" b="178" />
+      <color color="EX-orange" r="178" g="72" b="0" />
+      <color color="EX-dark-orange" r="90" g="64" b="0" />
+      <color color="EX-green" r="1" g="178" b="0" />
+      <color color="EX-medium-magenta" r="116" g="58" b="116" />
+      <color color="EX-dark-magenta" r="71" g="0" b="90" />
+      <color color="EX-yellow-orange" r="178" g="107" b="0" />
+      <color color="EX-pale-yellow-green" r="155" g="161" b="97" />
+      <color color="EX-dark-gray-purple" r="0" g="17" b="90" />
+      <color color="EX-dark-cyan" r="0" g="71" b="90" />
+      <color color="EX-dark-tan" r="116" g="93" b="58" />
+      <color color="EX-pure-blue" r="1" g="0" b="178" />
+    </colorSet>
+  </colors>
+  <displayOptions />
+  <nodes>
+    <node name="B" nid="1" row="0" minCol="0" maxCol="1" minColSha="0" maxColSha="3" color="EX-blue">
+      <drainZones>
+        <drainZone minCol="0" maxCol="1" />
+      </drainZones>
+      <drainZonesShadow>
+        <drainZoneShadow minCol="0" maxCol="1" />
+      </drainZonesShadow>
+    </node>
+    <node name="A" nid="0" row="1" minCol="0" maxCol="0" minColSha="0" maxColSha="2" color="EX-orange">
+      <drainZones/>
+      <drainZonesShadow>
+        <drainZoneShadow minCol="2" maxCol="2" />
+      </drainZonesShadow>
+    </node>
+    <node name="C" nid="2" row="2" minCol="1" maxCol="1" minColSha="1" maxColSha="3" color="EX-dark-cyan">
+      <drainZones/>
+      <drainZonesShadow>
+        <drainZoneShadow minCol="3" maxCol="3" />
+      </drainZonesShadow>
+    </node>
+    <node name="X" nid="3" row="3" minCol="1" maxCol="1" minColSha="3" maxColSha="3" color="EX-red">
+      <drainZones/>
+      <drainZonesShadow/>
+    </node>
+    <node name="Y" nid="4" row="4" minCol="1" maxCol="1" minColSha="3" maxColSha="3" color="EX-dark-orange">
+      <drainZones/>
+      <drainZonesShadow/>
+    </node>
+    <node name="Z" nid="5" row="5" minCol="1" maxCol="1" minColSha="3" maxColSha="3" color="EX-dark-gray-purple">
+      <drainZones/>
+      <drainZonesShadow/>
+    </node>
+  </nodes>
+  <links>
+    <link srcID="0" trgID="1" rel="pp" directed="false" shadow="false" column="0" shadowCol="0" srcRow="1" trgRow="0" color="EX-blue" />
+    <link srcID="1" trgID="2" rel="pp" directed="false" shadow="false" column="1" shadowCol="1" srcRow="0" trgRow="2" color="EX-orange" />
+    <link srcID="0" trgID="1" rel="pp" directed="false" shadow="true" shadowCol="2" srcRow="1" trgRow="0" color="EX-dark-cyan" />
+    <link srcID="1" trgID="2" rel="pp" directed="false" shadow="true" shadowCol="3" srcRow="0" trgRow="2" color="EX-red" />
+  </links>
+  <nodeAnnotations>
+  </nodeAnnotations>
+  <linkAnnotations>
+  </linkAnnotations>
+  <shadowLinkAnnotations>
+  </shadowLinkAnnotations>
+  <plugInDataSets>
+  </plugInDataSets>
+</BioFabric>

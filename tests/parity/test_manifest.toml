@@ -1,0 +1,167 @@
+# Parity Test Manifest
+#
+# Each [[test]] entry defines one parity test case. Golden files are generated
+# by running BioFabric (Java) headlessly via Docker and stored under
+# tests/parity/goldens/<golden_dir>/. The Rust tests load the same input,
+# run the same algorithm, and diff the output byte-for-byte.
+#
+# Outputs compared:
+#   output.noa  - node order (nodeName = row)
+#   output.eda  - link order (linkString = column)
+#   output.bif  - full session XML
+#
+# Fields:
+#   id          - Unique test identifier (used as Rust test name)
+#   description - Human-readable description
+#   input       - Filename in networks/sif/ or networks/gw/
+#   golden_dir  - Directory name under goldens/ containing reference outputs
+#   layout      - Layout algorithm: "default" (more later)
+#   shadows     - Whether shadow links are enabled
+#   compare     - List of output files to compare: ["noa", "eda", "bif"]
+#   tags        - Optional tags for filtering
+
+# ==========================================================================
+# SIF — Edge-case networks
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle"
+description = "Triangle (3 nodes, 3 edges) — simplest cycle"
+input = "triangle.sif"
+golden_dir = "triangle_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case"]
+
+[[test]]
+id = "sif_self_loop"
+description = "Self-loop (feedback edge, no shadow for A→A)"
+input = "self_loop.sif"
+golden_dir = "self_loop_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case"]
+
+[[test]]
+id = "sif_isolated_nodes"
+description = "Connected nodes plus 3 isolated nodes appended at end"
+input = "isolated_nodes.sif"
+golden_dir = "isolated_nodes_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case"]
+
+[[test]]
+id = "sif_disconnected_components"
+description = "4 disconnected components of varying size"
+input = "disconnected_components.sif"
+golden_dir = "disconnected_components_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case"]
+
+[[test]]
+id = "sif_multi_relation"
+description = "Multiple relation types (pp, pd, gi)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "edge_case"]
+
+# ==========================================================================
+# SIF — Real-world / stress
+# ==========================================================================
+
+[[test]]
+id = "sif_star500"
+description = "Star graph with 500 leaves (BioFabric sample)"
+input = "star-500.sif"
+golden_dir = "star-500_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress"]
+
+[[test]]
+id = "sif_ba2k"
+description = "Barabasi-Albert 2K network (BioFabric sample, ~12K edges)"
+input = "ba2K.sif"
+golden_dir = "ba2K_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress"]
+
+[[test]]
+id = "sif_bind_human"
+description = "BINDhuman protein interaction network from Cytoscape (~38K edges)"
+input = "BINDhuman.sif"
+golden_dir = "BINDhuman_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "stress"]
+
+# ==========================================================================
+# GW — Hand-crafted
+# ==========================================================================
+
+[[test]]
+id = "gw_triangle"
+description = "Triangle in LEDA/GW format (undirected, default relation)"
+input = "triangle.gw"
+golden_dir = "triangle_gw_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "edge_case"]
+
+[[test]]
+id = "gw_directed_tri"
+description = "Directed triangle in LEDA/GW format with named relations"
+input = "directed_triangle.gw"
+golden_dir = "directed_triangle_gw_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "edge_case"]
+
+# ==========================================================================
+# GW — Real-world (from SANA/networks/)
+# ==========================================================================
+
+[[test]]
+id = "gw_rnorvegicus"
+description = "R. norvegicus PPI network (~4K lines, small)"
+input = "RNorvegicus.gw"
+golden_dir = "RNorvegicus_gw_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress"]
+
+[[test]]
+id = "gw_celegans"
+description = "C. elegans PPI network (~8.5K lines, medium)"
+input = "CElegans.gw"
+golden_dir = "CElegans_gw_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress"]
+
+[[test]]
+id = "gw_yeast"
+description = "Yeast PPI network (~18K lines, large)"
+input = "yeast.gw"
+golden_dir = "yeast_gw_default"
+layout = "default"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "stress"]

@@ -1,0 +1,17 @@
+Link Column
+A (pp) B = 0
+B (pp) C = 1
+A shdw(pp) B = 2
+B shdw(pp) C = 3
+D (pp) E = 4
+E (pp) F = 5
+D shdw(pp) E = 6
+E shdw(pp) F = 7
+I (pp) J = 8
+K (pp) I = 9
+I shdw(pp) J = 10
+J (pp) K = 11
+K shdw(pp) I = 12
+J shdw(pp) K = 13
+G (pp) H = 14
+G shdw(pp) H = 15

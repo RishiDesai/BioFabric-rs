@@ -1,0 +1,6 @@
+Link Column
+A (pp) A = 0
+A (pp) B = 1
+A shdw(pp) B = 2
+B (pp) C = 3
+B shdw(pp) C = 4

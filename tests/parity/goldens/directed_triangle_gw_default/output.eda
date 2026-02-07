@@ -1,0 +1,7 @@
+Link Column
+A (activates) B = 0
+A (activates) C = 1
+A shdw(activates) B = 2
+B (inhibits) C = 3
+A shdw(activates) C = 4
+B shdw(inhibits) C = 5
