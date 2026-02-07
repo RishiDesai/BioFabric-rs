@@ -107,7 +107,7 @@ impl NodeLayout for DefaultNodeLayout {
         };
 
         // BFS with degree-ranked neighbor ordering
-        let mut do_bfs = |start: &NodeId, result: &mut Vec<NodeId>, placed: &mut HashSet<NodeId>| {
+        let do_bfs = |start: &NodeId, result: &mut Vec<NodeId>, placed: &mut HashSet<NodeId>| {
             if placed.contains(start) {
                 return;
             }
