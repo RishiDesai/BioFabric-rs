@@ -33,7 +33,7 @@
 
 use super::{ImportStats, ParseError};
 use crate::model::{Link, Network};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 
 /// Parse a SIF file from a path.
@@ -80,27 +80,70 @@ pub fn parse_reader<R: Read>(reader: BufReader<R>) -> Result<Network, ParseError
 pub fn parse_reader_with_stats<R: Read>(
     reader: BufReader<R>,
 ) -> Result<(Network, ImportStats), ParseError> {
-    // TODO: Implement SIF parsing
-    //
-    // See Java implementation: org.systemsbiology.biofabric.io.SIFImportLoader
-    //
-    // Algorithm:
-    // 1. Read file line by line
-    // 2. Skip empty lines and comments (lines starting with #)
-    // 3. Split each line by tabs, or spaces if no tabs
-    // 4. If 3 tokens: create link (source, relation, target)
-    //    - Also create shadow link if source != target
-    // 5. If 1 token: add as lone node
-    // 6. If 2 tokens or >3 tokens: record as bad line
-    // 7. Strip quotes from tokens if present
-    //
-    // Key behaviors to match:
-    // - Nodes are deduplicated (same name = same node)
-    // - Shadow links are created for non-feedback edges
-    // - Relations are case-sensitive
-    // - Empty lines are skipped
-    //
-    todo!("Implement SIF parser - see BioFabric/src/org/systemsbiology/biofabric/io/SIFImportLoader.java")
+    let mut stats = ImportStats::new();
+    let mut links: Vec<Link> = Vec::new();
+    let mut lone_node_names: Vec<String> = Vec::new();
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+        let trimmed = line.trim();
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Split by tab first; if only 1 token and no tab, split by space
+        let tokens: Vec<&str> = if trimmed.contains('\t') {
+            trimmed.split('\t').collect()
+        } else {
+            trimmed.split_whitespace().collect()
+        };
+
+        match tokens.len() {
+            3 => {
+                let source = strip_quotes(tokens[0]);
+                let relation = strip_quotes(tokens[1]);
+                let target = strip_quotes(tokens[2]);
+
+                let link = Link::new(source, target, relation);
+                let is_feedback = link.is_feedback();
+
+                // Add the regular link
+                links.push(link.clone());
+                stats.link_count += 1;
+
+                // Add inline shadow if not self-loop
+                if !is_feedback {
+                    if let Some(shadow) = link.to_shadow() {
+                        links.push(shadow);
+                        stats.shadow_link_count += 1;
+                    }
+                }
+            }
+            1 => {
+                let node_name = strip_quotes(tokens[0]);
+                lone_node_names.push(node_name.to_string());
+            }
+            _ => {
+                stats.bad_lines.push(trimmed.to_string());
+            }
+        }
+    }
+
+    // Build the network: add all links in order, then lone nodes
+    let mut network = Network::with_capacity(0, links.len());
+    for link in links {
+        network.add_link(link);
+    }
+    for name in &lone_node_names {
+        network.add_lone_node(name.as_str());
+    }
+
+    stats.node_count = network.node_count();
+    stats.lone_node_count = network.lone_nodes().len();
+
+    Ok((network, stats))
 }
 
 /// Parse a SIF string directly.
@@ -149,21 +192,21 @@ pub fn write_writer<W: std::io::Write>(
     network: &Network,
     mut writer: W,
 ) -> Result<(), ParseError> {
-    // TODO: Implement SIF writing
-    //
-    // Algorithm:
-    // 1. For each non-shadow link:
-    //    - Write: "{source}\t{relation}\t{target}\n"
-    // 2. For each lone node:
-    //    - Write: "{node_id}\n"
-    //
-    // Key behaviors:
-    // - Skip shadow links (is_shadow == true)
-    // - Skip duplicate edges (same source, target, relation but reversed)
-    //   for undirected networks
-    // - Lone nodes written at the end as single-token lines
-    //
-    todo!("Implement SIF writer")
+    // Write non-shadow links
+    for link in network.links() {
+        if link.is_shadow {
+            continue;
+        }
+        writeln!(writer, "{}\t{}\t{}", link.source, link.relation, link.target)
+            .map_err(|e| ParseError::Io(e))?;
+    }
+
+    // Write lone nodes
+    for id in network.lone_nodes() {
+        writeln!(writer, "{}", id).map_err(|e| ParseError::Io(e))?;
+    }
+
+    Ok(())
 }
 
 /// Write a network to SIF format as a string.
