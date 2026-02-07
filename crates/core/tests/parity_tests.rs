@@ -40,6 +40,8 @@ use biofabric_core::layout::cluster::{
 };
 use biofabric_core::layout::control_top::{ControlOrder, ControlTopLayout, TargetOrder};
 use biofabric_core::layout::default::{DefaultEdgeLayout, DefaultNodeLayout};
+use biofabric_core::layout::hierarchy::HierDAGLayout;
+use biofabric_core::layout::world_bank::WorldBankLayout;
 use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeLayout};
 use biofabric_core::layout::result::NetworkLayout;
 use biofabric_core::model::{Network, NodeId};
@@ -287,6 +289,49 @@ fn run_layout_with_groups(
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
 
+/// Run HierDAG layout and get the NetworkLayout.
+fn run_hierdag_layout(network: &Network, params: &LayoutParams) -> NetworkLayout {
+    let monitor = NoopMonitor;
+
+    let node_layout = HierDAGLayout::new();
+    let node_order = node_layout.layout_nodes(network, params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, params, &monitor).unwrap()
+}
+
+/// Run WorldBank layout and get the NetworkLayout.
+fn run_world_bank_layout(network: &Network) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    let node_layout = WorldBankLayout::new();
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+}
+
 /// Run the ControlTop layout with the given control and target ordering modes.
 fn run_control_top_layout(
     network: &Network,
@@ -373,6 +418,7 @@ fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLa
     };
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
+
 
 /// Parse a NOA-format file ("Node Row" header, "name = row" lines).
 ///
@@ -513,7 +559,19 @@ fn run_noa_test(cfg: &ParityConfig) {
     }
 
     // P11: Fixed node-order import — use imported order instead of BFS
-    let layout = if cfg.layout == "control_top" {
+    let layout = if cfg.layout == "hierdag" {
+        // P6: HierDAG layout
+        let mut params = LayoutParams {
+            include_shadows: true,
+            layout_mode: LayoutMode::PerNode,
+            ..Default::default()
+        };
+        params.point_up = cfg.point_up;
+        run_hierdag_layout(&network, &params)
+    } else if cfg.layout == "world_bank" {
+        // P10: WorldBank layout
+        run_world_bank_layout(&network)
+    } else if cfg.layout == "control_top" {
         let ctrl_mode = match cfg.control_mode {
             Some("degree_only") => ControlOrder::DegreeOnly,
             Some("partial_order") => ControlOrder::PartialOrder,
@@ -571,7 +629,19 @@ fn run_eda_test(cfg: &ParityConfig) {
     }
 
     // Choose the appropriate layout strategy
-    let layout = if cfg.layout == "control_top" {
+    let layout = if cfg.layout == "hierdag" {
+        // P6: HierDAG layout
+        let mut params = LayoutParams {
+            include_shadows: true,
+            layout_mode: LayoutMode::PerNode,
+            ..Default::default()
+        };
+        params.point_up = cfg.point_up;
+        run_hierdag_layout(&network, &params)
+    } else if cfg.layout == "world_bank" {
+        // P10: WorldBank layout
+        run_world_bank_layout(&network)
+    } else if cfg.layout == "control_top" {
         let ctrl_mode = match cfg.control_mode {
             Some("degree_only") => ControlOrder::DegreeOnly,
             Some("partial_order") => ControlOrder::PartialOrder,
@@ -1572,6 +1642,100 @@ fn generate_goldens() {
         let network = load_network(&input_path);
         let sub_network = extract_subnetwork(&network, extract_nodes);
         let layout = run_default_layout(&sub_network);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P6: HierDAG layout (3 DAGs × 2 pointUp) ----
+    let hierdag_cases: Vec<(&str, &str, bool)> = vec![
+        ("dag_simple.sif",   "dag_simple_hierdag_true",   true),
+        ("dag_simple.sif",   "dag_simple_hierdag_false",  false),
+        ("dag_diamond.sif",  "dag_diamond_hierdag_true",  true),
+        ("dag_diamond.sif",  "dag_diamond_hierdag_false", false),
+        ("dag_deep.sif",     "dag_deep_hierdag_true",     true),
+        ("dag_deep.sif",     "dag_deep_hierdag_false",    false),
+    ];
+
+    for (input_file, golden_dirname, point_up) in &hierdag_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (HierDAG): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let mut params = LayoutParams {
+            include_shadows: true,
+            layout_mode: LayoutMode::PerNode,
+            ..Default::default()
+        };
+        params.point_up = Some(*point_up);
+        let layout = run_hierdag_layout(&network, &params);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P10: WorldBank layout (2 networks) ----
+    let world_bank_cases: Vec<(&str, &str)> = vec![
+        ("star-500.sif",  "star-500_world_bank"),
+        ("ba2K.sif",      "ba2K_world_bank"),
+    ];
+
+    for (input_file, golden_dirname) in &world_bank_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (WorldBank): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let layout = run_world_bank_layout(&network);
 
         let noa_content = format_noa(&layout);
         let eda_content = format_eda(&layout);
