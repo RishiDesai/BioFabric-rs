@@ -6,9 +6,19 @@
 # GoldenGenerator against every .sif and .gw file in tests/parity/networks/.
 # Each network is tested with multiple configuration variants:
 #
-#   1. Default layout + shadows ON   (baseline)
-#   2. Default layout + shadows OFF  (shadow toggle test)
-#   3. Link grouping variants        (for multi-relation networks only)
+#   1.  Default layout + shadows ON   (baseline)
+#   2.  Default layout + shadows OFF  (shadow toggle test)
+#   3.  Link grouping variants        (for multi-relation networks only)
+#   5.  NodeSimilarity layout         (resort + clustered modes)
+#   6.  HierDAG layout                (pointUp true/false, DAG networks only)
+#   7.  NodeCluster layout            (requires .na attribute file)
+#   8.  ControlTop layout             (ctrl/target mode combos)
+#   9.  SetLayout                     (belongs_to/contains, directed bipartite)
+#   10. WorldBank layout              (hub-spoke grouping)
+#   11. Fixed-order import            (NOA/EDA files)
+#   12. Subnetwork extraction         (extract subset of nodes)
+#   13. Display option permutations   (drain zones, color levels)
+#   14. Alignment                     (merge two networks)
 #
 # Golden files are written to tests/parity/goldens/<variant-name>/.
 #
@@ -16,9 +26,14 @@
 #   ./tests/parity/generate_goldens.sh             # generate all
 #   ./tests/parity/generate_goldens.sh triangle     # generate one (matches name)
 #   ./tests/parity/generate_goldens.sh --rebuild    # force Docker rebuild
-#   ./tests/parity/generate_goldens.sh --shadows-only  # only shadows-on variants
-#   ./tests/parity/generate_goldens.sh --no-shadows-only # only shadows-off variants
-#   ./tests/parity/generate_goldens.sh --groups-only  # only link grouping variants
+#   ./tests/parity/generate_goldens.sh --shadows-only    # only P1 (shadows-on)
+#   ./tests/parity/generate_goldens.sh --no-shadows-only # only P2 (shadows-off)
+#   ./tests/parity/generate_goldens.sh --groups-only     # only P3 (link grouping)
+#   ./tests/parity/generate_goldens.sh --layouts-only    # only P5-P10 (layout algos)
+#   ./tests/parity/generate_goldens.sh --fixed-only      # only P11 (fixed-order)
+#   ./tests/parity/generate_goldens.sh --analysis-only   # only P12 (subnetwork extraction)
+#   ./tests/parity/generate_goldens.sh --display-only    # only P13 (display options)
+#   ./tests/parity/generate_goldens.sh --align-only      # only P14 (alignment)
 #
 # The first run takes a few minutes to compile BioFabric inside Docker.
 # Subsequent runs reuse the cached image and are fast.
@@ -38,16 +53,33 @@ FILTER=""
 ONLY_SHADOWS_ON=false
 ONLY_SHADOWS_OFF=false
 ONLY_GROUPS=false
+ONLY_LAYOUTS=false
+ONLY_FIXED=false
+ONLY_ANALYSIS=false
+ONLY_DISPLAY=false
+ONLY_ALIGN=false
 
 for arg in "$@"; do
     case "$arg" in
-        --rebuild)        REBUILD=true ;;
-        --shadows-only)   ONLY_SHADOWS_ON=true ;;
-        --no-shadows-only) ONLY_SHADOWS_OFF=true ;;
-        --groups-only)    ONLY_GROUPS=true ;;
-        *)                FILTER="$arg" ;;
+        --rebuild)           REBUILD=true ;;
+        --shadows-only)      ONLY_SHADOWS_ON=true ;;
+        --no-shadows-only)   ONLY_SHADOWS_OFF=true ;;
+        --groups-only)       ONLY_GROUPS=true ;;
+        --layouts-only)      ONLY_LAYOUTS=true ;;
+        --fixed-only)        ONLY_FIXED=true ;;
+        --analysis-only)     ONLY_ANALYSIS=true ;;
+        --display-only)      ONLY_DISPLAY=true ;;
+        --align-only)        ONLY_ALIGN=true ;;
+        *)                   FILTER="$arg" ;;
     esac
 done
+
+# Helper: check if no --*-only filter is active (run everything)
+no_only_filter() {
+    ! $ONLY_SHADOWS_ON && ! $ONLY_SHADOWS_OFF && ! $ONLY_GROUPS && \
+    ! $ONLY_LAYOUTS && ! $ONLY_FIXED && ! $ONLY_ANALYSIS && \
+    ! $ONLY_DISPLAY && ! $ONLY_ALIGN
+}
 
 # ---------- Build Docker image ----------
 
@@ -59,9 +91,14 @@ if $REBUILD || ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
     echo
 fi
 
-# ---------- Helper function ----------
+# ---------- Helper functions ----------
 
 # run_one <input_file> <subdir> <ext> <output_suffix> [extra_flags...]
+#
+# Runs GoldenGenerator in Docker for a single test variant.
+# The input file is mounted from NETWORKS_DIR/<subdir>/.
+# Additional network directories (na/, noa/, eda/, align/) are mounted
+# read-only so the generator can access attribute/alignment files.
 run_one() {
     local input_file="$1"
     local subdir="$2"
@@ -77,6 +114,16 @@ run_one() {
         docker run --rm
         -v "$NETWORKS_DIR/$subdir:/networks:ro"
         -v "$output_dir:/goldens"
+    )
+
+    # Mount additional directories if they exist (for attribute files, etc.)
+    for extra_dir in na noa eda align; do
+        if [ -d "$NETWORKS_DIR/$extra_dir" ]; then
+            docker_args+=(-v "$NETWORKS_DIR/$extra_dir:/$extra_dir:ro")
+        fi
+    done
+
+    docker_args+=(
         "$IMAGE_NAME"
         "/networks/$(basename "$input_file")" "/goldens"
     )
@@ -85,6 +132,38 @@ run_one() {
     if [ ${#extra_flags[@]} -gt 0 ]; then
         docker_args+=("${extra_flags[@]}")
     fi
+
+    if "${docker_args[@]}" > "$output_dir/generator.log" 2>&1; then
+        echo "OK"
+        return 0
+    else
+        echo "FAILED (see $output_dir/generator.log)"
+        return 2
+    fi
+}
+
+# run_one_multi <output_suffix> <docker_extra_volumes...> -- <generator_args...>
+#
+# More flexible variant that allows arbitrary volume mounts and generator arguments.
+# Used for alignment tests that need two network files.
+run_one_multi() {
+    local output_suffix="$1"
+    shift
+
+    local output_dir="$GOLDENS_DIR/$output_suffix"
+    mkdir -p "$output_dir"
+
+    local docker_args=(docker run --rm -v "$output_dir:/goldens")
+
+    # Collect volume mounts until we hit "--"
+    while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+        docker_args+=(-v "$1")
+        shift
+    done
+    [ "$1" = "--" ] && shift  # skip the "--"
+
+    docker_args+=("$IMAGE_NAME")
+    docker_args+=("$@")
 
     if "${docker_args[@]}" > "$output_dir/generator.log" 2>&1; then
         echo "OK"
@@ -107,7 +186,7 @@ FAIL=0
 # Phase 1: Default layout + shadows ON (baseline)
 # =========================================================================
 
-if ! $ONLY_SHADOWS_OFF && ! $ONLY_GROUPS; then
+if no_only_filter || $ONLY_SHADOWS_ON; then
     echo "=== Phase 1: Default layout + shadows ON ==="
     echo
 
@@ -142,7 +221,7 @@ fi
 # Phase 2: Default layout + shadows OFF
 # =========================================================================
 
-if ! $ONLY_SHADOWS_ON && ! $ONLY_GROUPS; then
+if no_only_filter || $ONLY_SHADOWS_OFF; then
     echo "=== Phase 2: Default layout + shadows OFF ==="
     echo
 
@@ -177,7 +256,7 @@ fi
 # Phase 3: Link grouping variants (multi-relation networks only)
 # =========================================================================
 
-if ! $ONLY_SHADOWS_ON && ! $ONLY_SHADOWS_OFF; then
+if no_only_filter || $ONLY_GROUPS; then
     echo "=== Phase 3: Link grouping variants ==="
     echo
 
@@ -215,6 +294,411 @@ if ! $ONLY_SHADOWS_ON && ! $ONLY_SHADOWS_OFF; then
         rc=0; run_one "$NETWORKS_DIR/gw/directed_triangle.gw" gw gw \
             "directed_triangle_gw_pernetwork" \
             --link-groups "activates,inhibits" --group-mode per_network || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 5: NodeSimilarity layout (resort + clustered)
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 5: NodeSimilarity layout ==="
+    echo
+
+    for mode in resort clustered; do
+        for f in triangle.sif multi_relation.sif ba2K.sif; do
+            name="$(basename "$f" .sif)"
+            [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${name}_similarity_${mode} ... "
+            rc=0; run_one "$NETWORKS_DIR/sif/$f" sif sif \
+                "${name}_similarity_${mode}" \
+                --layout "similarity_${mode}" || rc=$?
+            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+        done
+
+        for f in yeast.gw; do
+            name="$(basename "$f" .gw)"
+            [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${name}_gw_similarity_${mode} ... "
+            rc=0; run_one "$NETWORKS_DIR/gw/$f" gw gw \
+                "${name}_gw_similarity_${mode}" \
+                --layout "similarity_${mode}" || rc=$?
+            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+        done
+    done
+    echo
+fi
+
+# =========================================================================
+# Phase 6: HierDAG layout (DAG networks only, pointUp true/false)
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 6: HierDAG layout ==="
+    echo
+
+    for dag in dag_simple.sif dag_diamond.sif dag_deep.sif; do
+        name="$(basename "$dag" .sif)"
+        [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+
+        for pt in true false; do
+            suffix="${name}_hierdag_${pt}"
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${suffix} ... "
+            rc=0; run_one "$NETWORKS_DIR/sif/$dag" sif sif \
+                "$suffix" \
+                --layout hierdag --point-up "$pt" || rc=$?
+            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+        done
+    done
+    echo
+fi
+
+# =========================================================================
+# Phase 7: NodeCluster layout
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 7: NodeCluster layout ==="
+    echo
+
+    # multi_relation.sif + multi_relation_clusters.na
+    if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] multi_relation_node_cluster ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+            "multi_relation_node_cluster" \
+            --layout node_cluster --attribute-file "/na/multi_relation_clusters.na" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 8: ControlTop layout
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 8: ControlTop layout ==="
+    echo
+
+    # star-500: hub node "0" as control
+    if [ -z "$FILTER" ] || [ "$FILTER" = "star-500" ]; then
+        for cm in degree_only partial_order; do
+            for tm in target_degree breadth_order; do
+                suffix="star-500_controltop_${cm}_${tm}"
+                TOTAL=$((TOTAL + 1))
+                echo -n "  [$TOTAL] ${suffix} ... "
+                rc=0; run_one "$NETWORKS_DIR/sif/star-500.sif" sif sif \
+                    "$suffix" \
+                    --layout control_top --control-mode "$cm" --target-mode "$tm" || rc=$?
+                if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+                elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+            done
+        done
+    fi
+
+    # multi_relation: fixed list [A,B] as control nodes
+    if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
+        for cm in fixed_list degree_only; do
+            for tm in target_degree breadth_order; do
+                suffix="multi_relation_controltop_${cm}_${tm}"
+                TOTAL=$((TOTAL + 1))
+                echo -n "  [$TOTAL] ${suffix} ... "
+                extra_flags=(--layout control_top --control-mode "$cm" --target-mode "$tm")
+                if [ "$cm" = "fixed_list" ]; then
+                    extra_flags+=(--control-nodes "A,B")
+                fi
+                rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+                    "$suffix" "${extra_flags[@]}" || rc=$?
+                if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+                elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+            done
+        done
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 9: SetLayout (directed bipartite networks)
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 9: SetLayout ==="
+    echo
+
+    for lm in belongs_to contains; do
+        # bipartite.sif
+        if [ -z "$FILTER" ] || [ "$FILTER" = "bipartite" ]; then
+            suffix="bipartite_set_${lm}"
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${suffix} ... "
+            rc=0; run_one "$NETWORKS_DIR/sif/bipartite.sif" sif sif \
+                "$suffix" \
+                --layout set --link-means "$lm" || rc=$?
+            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+        fi
+
+        # star-500.sif
+        if [ -z "$FILTER" ] || [ "$FILTER" = "star-500" ]; then
+            suffix="star-500_set_${lm}"
+            TOTAL=$((TOTAL + 1))
+            echo -n "  [$TOTAL] ${suffix} ... "
+            rc=0; run_one "$NETWORKS_DIR/sif/star-500.sif" sif sif \
+                "$suffix" \
+                --layout set --link-means "$lm" || rc=$?
+            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+        fi
+    done
+    echo
+fi
+
+# =========================================================================
+# Phase 10: WorldBank layout
+# =========================================================================
+
+if no_only_filter || $ONLY_LAYOUTS; then
+    echo "=== Phase 10: WorldBank layout ==="
+    echo
+
+    for f in star-500.sif ba2K.sif; do
+        name="$(basename "$f" .sif)"
+        [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] ${name}_world_bank ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/$f" sif sif \
+            "${name}_world_bank" \
+            --layout world_bank || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    done
+    echo
+fi
+
+# =========================================================================
+# Phase 11: Fixed-order import (NOA/EDA files)
+# =========================================================================
+
+if no_only_filter || $ONLY_FIXED; then
+    echo "=== Phase 11: Fixed-order import ==="
+    echo
+
+    # triangle + reversed NOA
+    if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_fixed_noa ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_fixed_noa" \
+            --noa-file "/noa/triangle_reversed.noa" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    # multi_relation + shuffled NOA
+    if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] multi_relation_fixed_noa ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+            "multi_relation_fixed_noa" \
+            --noa-file "/noa/multi_relation_shuffled.noa" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    # ba2K + reversed NOA
+    if [ -z "$FILTER" ] || [ "$FILTER" = "ba2K" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] ba2K_fixed_noa ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/ba2K.sif" sif sif \
+            "ba2K_fixed_noa" \
+            --noa-file "/noa/ba2K_reversed.noa" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    # triangle + reversed EDA
+    if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_fixed_eda ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_fixed_eda" \
+            --eda-file "/eda/triangle_reversed.eda" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 12: Subnetwork extraction
+# =========================================================================
+
+if no_only_filter || $ONLY_ANALYSIS; then
+    echo "=== Phase 12: Subnetwork extraction ==="
+    echo
+
+    # Extract {A,B} from triangle
+    if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_extract_AB ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_extract_AB" \
+            --extract-nodes "A,B" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    # Extract {A,C,E} from multi_relation
+    if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] multi_relation_extract_ACE ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+            "multi_relation_extract_ACE" \
+            --extract-nodes "A,C,E" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    # Extract {A,B,C} from dense_clique
+    if [ -z "$FILTER" ] || [ "$FILTER" = "dense_clique" ]; then
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] dense_clique_extract_ABC ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/dense_clique.sif" sif sif \
+            "dense_clique_extract_ABC" \
+            --extract-nodes "A,B,C" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 13: Display option permutations
+# =========================================================================
+
+if no_only_filter || $ONLY_DISPLAY; then
+    echo "=== Phase 13: Display option permutations ==="
+    echo
+
+    if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
+        # minDrainZone = 0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_drain0 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_drain0" \
+            --min-drain-zone 0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # minDrainZone = 5
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_drain5 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_drain5" \
+            --min-drain-zone 5 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # node lighter = 0.0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_lighter0 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_lighter0" \
+            --node-lighter 0.0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # node lighter = 1.0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_lighter1 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_lighter1" \
+            --node-lighter 1.0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # link darker = 0.0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_darker0 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_darker0" \
+            --link-darker 0.0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # link darker = 1.0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] triangle_darker1 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/triangle.sif" sif sif \
+            "triangle_darker1" \
+            --link-darker 1.0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+
+    if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
+        # minDrainZone = 0
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] multi_relation_drain0 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+            "multi_relation_drain0" \
+            --min-drain-zone 0 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # minDrainZone = 5
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] multi_relation_drain5 ... "
+        rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
+            "multi_relation_drain5" \
+            --min-drain-zone 5 || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+    fi
+    echo
+fi
+
+# =========================================================================
+# Phase 14: Alignment tests
+# =========================================================================
+
+if no_only_filter || $ONLY_ALIGN; then
+    echo "=== Phase 14: Alignment ==="
+    echo
+
+    if [ -z "$FILTER" ] || [ "$FILTER" = "align" ]; then
+        # Perfect alignment
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] align_perfect ... "
+        rc=0; run_one_multi "align_perfect" \
+            "$NETWORKS_DIR/sif:/networks:ro" \
+            "$NETWORKS_DIR/align:/align:ro" \
+            -- \
+            "/networks/align_net1.sif" "/goldens" \
+            --align "/networks/align_net2.sif" "/align/test_perfect.align" || rc=$?
+        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
+        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
+
+        # Partial alignment
+        TOTAL=$((TOTAL + 1))
+        echo -n "  [$TOTAL] align_partial ... "
+        rc=0; run_one_multi "align_partial" \
+            "$NETWORKS_DIR/sif:/networks:ro" \
+            "$NETWORKS_DIR/align:/align:ro" \
+            -- \
+            "/networks/align_net1.sif" "/goldens" \
+            --align "/networks/align_net2.sif" "/align/test_partial.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi

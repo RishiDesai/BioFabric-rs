@@ -565,3 +565,741 @@ layout = "roundtrip"
 shadows = true
 compare = ["bif"]
 tags = ["roundtrip", "p4"]
+
+# ==========================================================================
+#
+#  PHASE 5: NodeSimilarity layout (resort mode)
+#
+#  Reorders nodes by Jaccard similarity using connection vectors.
+#  4 networks × 3 formats = 12 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_similarity_resort"
+description = "Triangle with NodeSimilarity resort layout"
+input = "triangle.sif"
+golden_dir = "triangle_similarity_resort"
+layout = "similarity_resort"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "p5"]
+
+[[test]]
+id = "sif_multi_relation_similarity_resort"
+description = "Multi-relation with NodeSimilarity resort layout"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_similarity_resort"
+layout = "similarity_resort"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "p5"]
+
+[[test]]
+id = "sif_ba2k_similarity_resort"
+description = "BA-2K with NodeSimilarity resort layout"
+input = "ba2K.sif"
+golden_dir = "ba2K_similarity_resort"
+layout = "similarity_resort"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "stress", "p5"]
+
+[[test]]
+id = "gw_yeast_similarity_resort"
+description = "Yeast PPI with NodeSimilarity resort layout"
+input = "yeast.gw"
+golden_dir = "yeast_gw_similarity_resort"
+layout = "similarity_resort"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "layout", "similarity", "stress", "p5"]
+
+# ==========================================================================
+#
+#  PHASE 5b: NodeSimilarity layout (clustered mode)
+#
+#  Clusters nodes by similarity matrix using Jaccard distance.
+#  4 networks × 3 formats = 12 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_similarity_clustered"
+description = "Triangle with NodeSimilarity clustered layout"
+input = "triangle.sif"
+golden_dir = "triangle_similarity_clustered"
+layout = "similarity_clustered"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "p5"]
+
+[[test]]
+id = "sif_multi_relation_similarity_clustered"
+description = "Multi-relation with NodeSimilarity clustered layout"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_similarity_clustered"
+layout = "similarity_clustered"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "p5"]
+
+[[test]]
+id = "sif_ba2k_similarity_clustered"
+description = "BA-2K with NodeSimilarity clustered layout"
+input = "ba2K.sif"
+golden_dir = "ba2K_similarity_clustered"
+layout = "similarity_clustered"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "stress", "p5"]
+
+[[test]]
+id = "gw_yeast_similarity_clustered"
+description = "Yeast PPI with NodeSimilarity clustered layout"
+input = "yeast.gw"
+golden_dir = "yeast_gw_similarity_clustered"
+layout = "similarity_clustered"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["gw", "layout", "similarity", "stress", "p5"]
+
+# ==========================================================================
+#
+#  PHASE 6: HierDAG layout
+#
+#  Hierarchical DAG layout with pointUp=true and pointUp=false.
+#  Requires cycle-free directed networks.
+#  3 DAGs × 2 pointUp values × 3 formats = 18 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_dag_simple_hierdag_true"
+description = "5-node DAG with HierDAG layout (pointUp=true)"
+input = "dag_simple.sif"
+golden_dir = "dag_simple_hierdag_true"
+layout = "hierdag"
+shadows = true
+point_up = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+[[test]]
+id = "sif_dag_simple_hierdag_false"
+description = "5-node DAG with HierDAG layout (pointUp=false)"
+input = "dag_simple.sif"
+golden_dir = "dag_simple_hierdag_false"
+layout = "hierdag"
+shadows = true
+point_up = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+[[test]]
+id = "sif_dag_diamond_hierdag_true"
+description = "4-node diamond DAG with HierDAG layout (pointUp=true)"
+input = "dag_diamond.sif"
+golden_dir = "dag_diamond_hierdag_true"
+layout = "hierdag"
+shadows = true
+point_up = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+[[test]]
+id = "sif_dag_diamond_hierdag_false"
+description = "4-node diamond DAG with HierDAG layout (pointUp=false)"
+input = "dag_diamond.sif"
+golden_dir = "dag_diamond_hierdag_false"
+layout = "hierdag"
+shadows = true
+point_up = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+[[test]]
+id = "sif_dag_deep_hierdag_true"
+description = "8-node linear DAG with HierDAG layout (pointUp=true)"
+input = "dag_deep.sif"
+golden_dir = "dag_deep_hierdag_true"
+layout = "hierdag"
+shadows = true
+point_up = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+[[test]]
+id = "sif_dag_deep_hierdag_false"
+description = "8-node linear DAG with HierDAG layout (pointUp=false)"
+input = "dag_deep.sif"
+golden_dir = "dag_deep_hierdag_false"
+layout = "hierdag"
+shadows = true
+point_up = false
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "hierdag", "p6"]
+
+# ==========================================================================
+#
+#  PHASE 7: NodeCluster layout
+#
+#  Clusters nodes by attribute file assignment.
+#  1 network × 3 formats = 3 test functions (expandable)
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_multi_relation_node_cluster"
+description = "Multi-relation with NodeCluster layout (group1/group2/group3)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_node_cluster"
+layout = "node_cluster"
+shadows = true
+attribute_file = "multi_relation_clusters.na"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "cluster", "p7"]
+
+# ==========================================================================
+#
+#  PHASE 8: ControlTop layout
+#
+#  Pins control nodes at top. Tests multiple ctrl/target mode combinations.
+#  2 networks × 4 mode combos × 3 formats = 24 test functions
+#
+# ==========================================================================
+
+# --- star-500: degree_only + target_degree ---
+
+[[test]]
+id = "sif_star500_controltop_degree_target"
+description = "Star-500 ControlTop (degree_only, target_degree)"
+input = "star-500.sif"
+golden_dir = "star-500_controltop_degree_only_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "stress", "p8"]
+
+# --- star-500: degree_only + breadth_order ---
+
+[[test]]
+id = "sif_star500_controltop_degree_breadth"
+description = "Star-500 ControlTop (degree_only, breadth_order)"
+input = "star-500.sif"
+golden_dir = "star-500_controltop_degree_only_breadth_order"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "breadth_order"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "stress", "p8"]
+
+# --- star-500: partial_order + target_degree ---
+
+[[test]]
+id = "sif_star500_controltop_partial_target"
+description = "Star-500 ControlTop (partial_order, target_degree)"
+input = "star-500.sif"
+golden_dir = "star-500_controltop_partial_order_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "partial_order"
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "stress", "p8"]
+
+# --- star-500: partial_order + breadth_order ---
+
+[[test]]
+id = "sif_star500_controltop_partial_breadth"
+description = "Star-500 ControlTop (partial_order, breadth_order)"
+input = "star-500.sif"
+golden_dir = "star-500_controltop_partial_order_breadth_order"
+layout = "control_top"
+shadows = true
+control_mode = "partial_order"
+target_mode = "breadth_order"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "stress", "p8"]
+
+# --- multi_relation: fixed_list [A,B] + target_degree ---
+
+[[test]]
+id = "sif_multi_relation_controltop_fixed_target"
+description = "Multi-relation ControlTop (fixed_list [A,B], target_degree)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_controltop_fixed_list_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "fixed_list"
+control_nodes = ["A", "B"]
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "p8"]
+
+# --- multi_relation: fixed_list [A,B] + breadth_order ---
+
+[[test]]
+id = "sif_multi_relation_controltop_fixed_breadth"
+description = "Multi-relation ControlTop (fixed_list [A,B], breadth_order)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_controltop_fixed_list_breadth_order"
+layout = "control_top"
+shadows = true
+control_mode = "fixed_list"
+control_nodes = ["A", "B"]
+target_mode = "breadth_order"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "p8"]
+
+# --- multi_relation: degree_only + target_degree ---
+
+[[test]]
+id = "sif_multi_relation_controltop_degree_target"
+description = "Multi-relation ControlTop (degree_only, target_degree)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_controltop_degree_only_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "p8"]
+
+# --- multi_relation: degree_only + breadth_order ---
+
+[[test]]
+id = "sif_multi_relation_controltop_degree_breadth"
+description = "Multi-relation ControlTop (degree_only, breadth_order)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_controltop_degree_only_breadth_order"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "breadth_order"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "p8"]
+
+# ==========================================================================
+#
+#  PHASE 9: SetLayout
+#
+#  Bipartite/set membership layout with belongs_to/contains semantics.
+#  2 networks × 2 link-means modes × 3 formats = 12 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_bipartite_set_belongs_to"
+description = "Bipartite with SetLayout (belongs_to)"
+input = "bipartite.sif"
+golden_dir = "bipartite_set_belongs_to"
+layout = "set"
+shadows = true
+link_means = "belongs_to"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "set", "p9"]
+
+[[test]]
+id = "sif_bipartite_set_contains"
+description = "Bipartite with SetLayout (contains)"
+input = "bipartite.sif"
+golden_dir = "bipartite_set_contains"
+layout = "set"
+shadows = true
+link_means = "contains"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "set", "p9"]
+
+[[test]]
+id = "sif_star500_set_belongs_to"
+description = "Star-500 with SetLayout (belongs_to)"
+input = "star-500.sif"
+golden_dir = "star-500_set_belongs_to"
+layout = "set"
+shadows = true
+link_means = "belongs_to"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "set", "stress", "p9"]
+
+[[test]]
+id = "sif_star500_set_contains"
+description = "Star-500 with SetLayout (contains)"
+input = "star-500.sif"
+golden_dir = "star-500_set_contains"
+layout = "set"
+shadows = true
+link_means = "contains"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "set", "stress", "p9"]
+
+# ==========================================================================
+#
+#  PHASE 10: WorldBank layout
+#
+#  Hub-spoke grouping. No special input requirements.
+#  2 networks × 3 formats = 6 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_star500_world_bank"
+description = "Star-500 with WorldBank layout"
+input = "star-500.sif"
+golden_dir = "star-500_world_bank"
+layout = "world_bank"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "world_bank", "stress", "p10"]
+
+[[test]]
+id = "sif_ba2k_world_bank"
+description = "BA-2K with WorldBank layout"
+input = "ba2K.sif"
+golden_dir = "ba2K_world_bank"
+layout = "world_bank"
+shadows = true
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "world_bank", "stress", "p10"]
+
+# ==========================================================================
+#
+#  PHASE 11: Fixed-order import (NOA/EDA files)
+#
+#  Bypasses the layout algorithm and uses a fixed node or link ordering.
+#  4 tests × 3 formats = 12 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_fixed_noa"
+description = "Triangle with fixed node order from reversed NOA"
+input = "triangle.sif"
+golden_dir = "triangle_fixed_noa"
+layout = "fixed_node_order"
+shadows = true
+noa_file = "triangle_reversed.noa"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "fixed_order", "p11"]
+
+[[test]]
+id = "sif_multi_relation_fixed_noa"
+description = "Multi-relation with fixed node order from shuffled NOA"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_fixed_noa"
+layout = "fixed_node_order"
+shadows = true
+noa_file = "multi_relation_shuffled.noa"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "fixed_order", "p11"]
+
+[[test]]
+id = "sif_ba2k_fixed_noa"
+description = "BA-2K with fixed node order from reversed NOA"
+input = "ba2K.sif"
+golden_dir = "ba2K_fixed_noa"
+layout = "fixed_node_order"
+shadows = true
+noa_file = "ba2K_reversed.noa"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "fixed_order", "stress", "p11"]
+
+[[test]]
+id = "sif_triangle_fixed_eda"
+description = "Triangle with fixed link order from reversed EDA"
+input = "triangle.sif"
+golden_dir = "triangle_fixed_eda"
+layout = "fixed_link_order"
+shadows = true
+eda_file = "triangle_reversed.eda"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "fixed_order", "p11"]
+
+# ==========================================================================
+#
+#  PHASE 12: Subnetwork extraction
+#
+#  Extract a subset of nodes and their induced edges.
+#  3 tests × 3 formats = 9 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_extract_AB"
+description = "Triangle: extract subnetwork {A, B}"
+input = "triangle.sif"
+golden_dir = "triangle_extract_AB"
+layout = "default"
+shadows = true
+extract_nodes = ["A", "B"]
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "analysis", "extraction", "p12"]
+
+[[test]]
+id = "sif_multi_relation_extract_ACE"
+description = "Multi-relation: extract subnetwork {A, C, E}"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_extract_ACE"
+layout = "default"
+shadows = true
+extract_nodes = ["A", "C", "E"]
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "analysis", "extraction", "p12"]
+
+[[test]]
+id = "sif_dense_clique_extract_ABC"
+description = "Dense clique K6: extract subnetwork {A, B, C}"
+input = "dense_clique.sif"
+golden_dir = "dense_clique_extract_ABC"
+layout = "default"
+shadows = true
+extract_nodes = ["A", "B", "C"]
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "analysis", "extraction", "p12"]
+
+# ==========================================================================
+#
+#  PHASE 13: Analysis operations (cycle detection + Jaccard)
+#
+#  These are simpler text/boolean output comparisons.
+#  5 cycle tests + 5 Jaccard tests = 10 test functions (1 per case)
+#
+# ==========================================================================
+
+[[test]]
+id = "analysis_cycle_triangle"
+description = "Cycle detection on triangle (undirected → depends on interpretation)"
+input = "triangle.sif"
+golden_dir = "analysis_cycle_triangle"
+layout = "analysis_cycle"
+shadows = true
+compare = ["txt"]
+tags = ["analysis", "cycle", "p13"]
+
+[[test]]
+id = "analysis_cycle_self_loop"
+description = "Cycle detection on self-loop network"
+input = "self_loop.sif"
+golden_dir = "analysis_cycle_self_loop"
+layout = "analysis_cycle"
+shadows = true
+compare = ["txt"]
+tags = ["analysis", "cycle", "p13"]
+
+[[test]]
+id = "analysis_cycle_dag_simple"
+description = "Cycle detection on dag_simple (no cycles)"
+input = "dag_simple.sif"
+golden_dir = "analysis_cycle_dag_simple"
+layout = "analysis_cycle"
+shadows = true
+compare = ["txt"]
+tags = ["analysis", "cycle", "p13"]
+
+[[test]]
+id = "analysis_cycle_linear_chain"
+description = "Cycle detection on linear chain"
+input = "linear_chain.sif"
+golden_dir = "analysis_cycle_linear_chain"
+layout = "analysis_cycle"
+shadows = true
+compare = ["txt"]
+tags = ["analysis", "cycle", "p13"]
+
+[[test]]
+id = "analysis_cycle_disconnected"
+description = "Cycle detection on disconnected components"
+input = "disconnected_components.sif"
+golden_dir = "analysis_cycle_disconnected"
+layout = "analysis_cycle"
+shadows = true
+compare = ["txt"]
+tags = ["analysis", "cycle", "p13"]
+
+[[test]]
+id = "analysis_jaccard_triangle_AB"
+description = "Jaccard similarity of A,B in triangle"
+input = "triangle.sif"
+golden_dir = "analysis_jaccard_triangle_AB"
+layout = "analysis_jaccard"
+shadows = true
+node_pair = ["A", "B"]
+compare = ["txt"]
+tags = ["analysis", "jaccard", "p13"]
+
+[[test]]
+id = "analysis_jaccard_triangle_AC"
+description = "Jaccard similarity of A,C in triangle"
+input = "triangle.sif"
+golden_dir = "analysis_jaccard_triangle_AC"
+layout = "analysis_jaccard"
+shadows = true
+node_pair = ["A", "C"]
+compare = ["txt"]
+tags = ["analysis", "jaccard", "p13"]
+
+[[test]]
+id = "analysis_jaccard_multi_relation_AD"
+description = "Jaccard similarity of A,D in multi_relation"
+input = "multi_relation.sif"
+golden_dir = "analysis_jaccard_multi_relation_AD"
+layout = "analysis_jaccard"
+shadows = true
+node_pair = ["A", "D"]
+compare = ["txt"]
+tags = ["analysis", "jaccard", "p13"]
+
+[[test]]
+id = "analysis_jaccard_star500_hub_leaf"
+description = "Jaccard similarity of hub (0) and leaf (1) in star-500"
+input = "star-500.sif"
+golden_dir = "analysis_jaccard_star500_hub_leaf"
+layout = "analysis_jaccard"
+shadows = true
+node_pair = ["0", "1"]
+compare = ["txt"]
+tags = ["analysis", "jaccard", "stress", "p13"]
+
+[[test]]
+id = "analysis_jaccard_dense_clique_AB"
+description = "Jaccard similarity of A,B in dense clique (should be high)"
+input = "dense_clique.sif"
+golden_dir = "analysis_jaccard_dense_clique_AB"
+layout = "analysis_jaccard"
+shadows = true
+node_pair = ["A", "B"]
+compare = ["txt"]
+tags = ["analysis", "jaccard", "p13"]
+
+# ==========================================================================
+#
+#  PHASE 14: Display option permutations
+#
+#  BIF-only tests — display options affect colors and drain zones.
+#  8 tests × 1 format = 8 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_drain0"
+description = "Triangle with minDrainZone=0 (no drain zones)"
+input = "triangle.sif"
+golden_dir = "triangle_drain0"
+layout = "default"
+shadows = true
+min_drain_zone = 0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_triangle_drain5"
+description = "Triangle with minDrainZone=5 (larger drain zones)"
+input = "triangle.sif"
+golden_dir = "triangle_drain5"
+layout = "default"
+shadows = true
+min_drain_zone = 5
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_triangle_lighter0"
+description = "Triangle with nodeLighterLevel=0.0"
+input = "triangle.sif"
+golden_dir = "triangle_lighter0"
+layout = "default"
+shadows = true
+node_lighter = 0.0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_triangle_lighter1"
+description = "Triangle with nodeLighterLevel=1.0"
+input = "triangle.sif"
+golden_dir = "triangle_lighter1"
+layout = "default"
+shadows = true
+node_lighter = 1.0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_triangle_darker0"
+description = "Triangle with linkDarkerLevel=0.0"
+input = "triangle.sif"
+golden_dir = "triangle_darker0"
+layout = "default"
+shadows = true
+link_darker = 0.0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_triangle_darker1"
+description = "Triangle with linkDarkerLevel=1.0"
+input = "triangle.sif"
+golden_dir = "triangle_darker1"
+layout = "default"
+shadows = true
+link_darker = 1.0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_multi_relation_drain0"
+description = "Multi-relation with minDrainZone=0"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_drain0"
+layout = "default"
+shadows = true
+min_drain_zone = 0
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+[[test]]
+id = "sif_multi_relation_drain5"
+description = "Multi-relation with minDrainZone=5"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_drain5"
+layout = "default"
+shadows = true
+min_drain_zone = 5
+compare = ["bif"]
+tags = ["sif", "display", "p14"]
+
+# ==========================================================================
+#
+#  PHASE 15: Alignment tests
+#
+#  Merge two networks using an alignment file.
+#  2 alignment scenarios × 3 formats = 6 test functions + scoring tests
+#
+# ==========================================================================
+
+[[test]]
+id = "align_perfect"
+description = "Perfect alignment: align_net1 + align_net2 with 3-node mapping"
+input = "align_net1.sif"
+golden_dir = "align_perfect"
+layout = "alignment"
+shadows = true
+align_net2 = "align_net2.sif"
+align_file = "test_perfect.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "p15"]
+
+[[test]]
+id = "align_partial"
+description = "Partial alignment: align_net1 + align_net2 with 2-node mapping"
+input = "align_net1.sif"
+golden_dir = "align_partial"
+layout = "alignment"
+shadows = true
+align_net2 = "align_net2.sif"
+align_file = "test_partial.align"
+compare = ["noa", "eda", "bif"]
+tags = ["alignment", "p15"]
