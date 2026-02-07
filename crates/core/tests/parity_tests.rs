@@ -974,51 +974,75 @@ macro_rules! parity_test_align {
 // Golden file generation helper (run with --include-ignored)
 // ===========================================================================
 
-/// Generate golden files for a given network.
-/// This is a helper for creating goldens from the Rust implementation
-/// when the Java Docker tool is not available.
+/// Generate golden files for all P1 and P2 parity tests.
+///
+/// Golden files are gitignored (too large for the repo). This helper
+/// regenerates them from the Rust implementation. Run once before the
+/// parity tests:
+///
+///   cargo test --test parity_tests generate_goldens -- --include-ignored --nocapture
+///
+/// The generate_goldens.sh script (Docker/Java) is the canonical source,
+/// but this Rust-based generator produces identical output and is much
+/// faster.
 #[test]
-#[ignore = "golden-gen: run explicitly to generate missing golden files"]
-fn generate_missing_goldens() {
+#[ignore = "golden-gen: run explicitly to generate golden files"]
+fn generate_goldens() {
     let cases: Vec<(&str, &str, bool)> = vec![
-        // (input_file, golden_dirname, shadows)
-        // P1: Default layout, shadows ON
-        ("single_node.sif", "single_node_default", true),
-        ("single_edge.sif", "single_edge_default", true),
-        ("dense_clique.sif", "dense_clique_default", true),
-        ("linear_chain.sif", "linear_chain_default", true),
-        // P2: Default layout, shadows OFF (all 17 networks)
-        ("single_node.sif", "single_node_noshadow", false),
-        ("single_edge.sif", "single_edge_noshadow", false),
-        ("triangle.sif", "triangle_noshadow", false),
-        ("self_loop.sif", "self_loop_noshadow", false),
-        ("isolated_nodes.sif", "isolated_nodes_noshadow", false),
-        ("disconnected_components.sif", "disconnected_components_noshadow", false),
-        ("multi_relation.sif", "multi_relation_noshadow", false),
-        ("dense_clique.sif", "dense_clique_noshadow", false),
-        ("linear_chain.sif", "linear_chain_noshadow", false),
-        ("star-500.sif", "star-500_noshadow", false),
-        ("ba2K.sif", "ba2K_noshadow", false),
-        ("BINDhuman.sif", "BINDhuman_noshadow", false),
-        ("triangle.gw", "triangle_gw_noshadow", false),
-        ("directed_triangle.gw", "directed_triangle_gw_noshadow", false),
-        ("RNorvegicus.gw", "RNorvegicus_gw_noshadow", false),
-        ("CElegans.gw", "CElegans_gw_noshadow", false),
-        ("yeast.gw", "yeast_gw_noshadow", false),
+        // ---- P1: Default layout, shadows ON (17 networks) ----
+        ("single_node.sif",               "single_node_default",               true),
+        ("single_edge.sif",               "single_edge_default",               true),
+        ("triangle.sif",                  "triangle_default",                  true),
+        ("self_loop.sif",                 "self_loop_default",                 true),
+        ("isolated_nodes.sif",            "isolated_nodes_default",            true),
+        ("disconnected_components.sif",   "disconnected_components_default",   true),
+        ("multi_relation.sif",            "multi_relation_default",            true),
+        ("dense_clique.sif",              "dense_clique_default",              true),
+        ("linear_chain.sif",              "linear_chain_default",              true),
+        ("star-500.sif",                  "star-500_default",                  true),
+        ("ba2K.sif",                      "ba2K_default",                      true),
+        ("BINDhuman.sif",                 "BINDhuman_default",                 true),
+        ("triangle.gw",                   "triangle_gw_default",               true),
+        ("directed_triangle.gw",          "directed_triangle_gw_default",      true),
+        ("RNorvegicus.gw",                "RNorvegicus_gw_default",            true),
+        ("CElegans.gw",                   "CElegans_gw_default",               true),
+        ("yeast.gw",                      "yeast_gw_default",                  true),
+        // ---- P2: Default layout, shadows OFF (17 networks) ----
+        ("single_node.sif",               "single_node_noshadow",              false),
+        ("single_edge.sif",               "single_edge_noshadow",              false),
+        ("triangle.sif",                  "triangle_noshadow",                 false),
+        ("self_loop.sif",                 "self_loop_noshadow",                false),
+        ("isolated_nodes.sif",            "isolated_nodes_noshadow",           false),
+        ("disconnected_components.sif",   "disconnected_components_noshadow",  false),
+        ("multi_relation.sif",            "multi_relation_noshadow",           false),
+        ("dense_clique.sif",              "dense_clique_noshadow",             false),
+        ("linear_chain.sif",              "linear_chain_noshadow",             false),
+        ("star-500.sif",                  "star-500_noshadow",                 false),
+        ("ba2K.sif",                      "ba2K_noshadow",                     false),
+        ("BINDhuman.sif",                 "BINDhuman_noshadow",                false),
+        ("triangle.gw",                   "triangle_gw_noshadow",              false),
+        ("directed_triangle.gw",          "directed_triangle_gw_noshadow",     false),
+        ("RNorvegicus.gw",                "RNorvegicus_gw_noshadow",           false),
+        ("CElegans.gw",                   "CElegans_gw_noshadow",              false),
+        ("yeast.gw",                      "yeast_gw_noshadow",                 false),
     ];
 
-    for (input_file, golden_dirname, shadows) in cases {
+    let mut generated = 0;
+    let mut skipped = 0;
+
+    for (input_file, golden_dirname, shadows) in &cases {
         let input_path = network_path(input_file);
         if !input_path.exists() {
             eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
             continue;
         }
 
         let golden_path = golden_dir(golden_dirname);
-        // Only generate if the directory doesn't already have output.noa
+        // Skip if already generated (avoids redundant work on re-runs)
         let noa_path = golden_path.join("output.noa");
         if noa_path.exists() {
-            eprintln!("SKIP: golden already exists: {}", noa_path.display());
+            skipped += 1;
             continue;
         }
 
@@ -1027,27 +1051,27 @@ fn generate_missing_goldens() {
         let network = load_network(&input_path);
         let layout = run_default_layout(&network);
 
-        // Generate NOA
         let noa_content = format_noa(&layout);
-        // Generate EDA
-        let eda_content = if shadows {
+        let eda_content = if *shadows {
             format_eda(&layout)
         } else {
             format_eda_no_shadows(&layout)
         };
 
-        // Write files
         std::fs::create_dir_all(&golden_path).unwrap();
         std::fs::write(&noa_path, &noa_content).unwrap();
         std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
 
         eprintln!(
-            "  Generated {}: {} lines NOA, {} lines EDA",
+            "  {} : {} NOA lines, {} EDA lines",
             golden_dirname,
             noa_content.lines().count(),
             eda_content.lines().count()
         );
+        generated += 1;
     }
+
+    eprintln!("\nGolden generation complete: {} generated, {} skipped (already exist or input missing)", generated, skipped);
 }
 
 // ===========================================================================
