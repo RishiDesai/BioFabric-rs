@@ -1,0 +1,9 @@
+Link Column
+A (pp) B = 0
+B (pp) C = 1
+D (pp) E = 2
+E (pp) F = 3
+I (pp) J = 4
+K (pp) I = 5
+J (pp) K = 6
+G (pp) H = 7
