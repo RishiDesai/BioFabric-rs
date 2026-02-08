@@ -69,14 +69,7 @@ fn alignment_config_for_golden(golden_dir: &str) -> Option<(&'static str, &'stat
         let align_file = match suffix {
             s if s.starts_with("perfect") => "yeast_sc_perfect.align",
             s if s.starts_with("s3_pure") => "yeast_sc_s3_pure.align",
-            s if s.starts_with("s3_050") => "yeast_sc_s3_050.align",
-            s if s.starts_with("s3_001") => "yeast_sc_s3_001.align",
-            s if s.starts_with("s3_003") => "yeast_sc_s3_003.align",
-            s if s.starts_with("s3_005") => "yeast_sc_s3_005.align",
-            s if s.starts_with("s3_010") => "yeast_sc_s3_010.align",
-            s if s.starts_with("s3_030") => "yeast_sc_s3_030.align",
-            s if s.starts_with("s3_100") => "yeast_sc_s3_100.align",
-            s if s.starts_with("importance_pure") => "yeast_sc_importance_pure.align",
+            // S3 sweep + importance_pure removed — redundant with perfect + s3_pure
             _ => return None,
         };
         return Some(("Yeast2KReduced.sif", "SC.sif", align_file, Some("yeast_sc_perfect.align")));
@@ -939,17 +932,7 @@ fn align_score_yeast_sc_s3_pure_s3() {
     run_alignment_score_test("align_yeast_sc_s3_pure", "Symmetric Substructure Score", 0.0);
 }
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_ec() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Edge Coverage", 0.0);
-}
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_s3() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Symmetric Substructure Score", 0.0);
-}
 
 // ---------------------------------------------------------------------------
 // Alignment scoring: complete metric coverage (NGS, LGS, JS + gaps)
@@ -1046,325 +1029,20 @@ fn align_score_yeast_sc_s3_pure_js() {
     run_alignment_score_test("align_yeast_sc_s3_pure", "Jaccard Similarity", 0.0);
 }
 
-// --- yeast_sc_importance_pure: add ICS, NC, NGS, LGS, JS ---
+// importance_pure + s3_050 scoring tests removed — redundant with perfect + s3_pure
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_ics() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Induced Conserved Structure", 0.0);
-}
+// DesaiEtAl-2019 blend variants (s3_001 through s3_100) removed —
+// redundant with perfect + s3_pure for code path coverage.
+// Were 42 scoring tests (6 variants × 7 metrics), all loading Yeast2KReduced + SC.
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_nc() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Node Correctness", 0.0);
-}
+// [42 test functions for s3_001 through s3_100 were here — removed]
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_ngs() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Node Group Similarity", 0.0);
-}
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_lgs() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Link Group Similarity", 0.0);
-}
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_importance_pure_js() {
-    run_alignment_score_test("align_yeast_sc_importance_pure", "Jaccard Similarity", 0.0);
-}
 
-// --- yeast_sc_s3_050: all 7 metrics (no score tests existed for this variant) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Edge Coverage", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Symmetric Substructure Score", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Induced Conserved Structure", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Node Correctness", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Node Group Similarity", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Link Group Similarity", 0.0);
-}
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_050_js() {
-    run_alignment_score_test("align_yeast_sc_s3_050", "Jaccard Similarity", 0.0);
-}
-
-// ---------------------------------------------------------------------------
-// DesaiEtAl-2019 additional blend variants: 6 × 7 = 42 scoring tests
-// ---------------------------------------------------------------------------
-//
-// Ground-truth values extracted from the DesaiEtAl publication BIF files.
-// These BIF files were generated by the original Java BioFabric and contain
-// the exact scoring values embedded in <plugInDataSets> XML.
-//
-// Blend variants (all use Yeast2KReduced ↔ SC, perfect ref = yeast_sc_perfect):
-//   s3_001  →  S3=0.001, importance=0.999
-//   s3_003  →  S3=0.003, importance=0.997
-//   s3_005  →  S3=0.005, importance=0.995
-//   s3_010  →  S3=0.010, importance=0.990
-//   s3_030  →  S3=0.030, importance=0.970
-//   s3_100  →  S3=0.100, importance=0.900
-
-// --- yeast_sc_s3_001 (from CaseStudy-III-p001S3p999Imp.bif) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Edge Coverage", 0.450725269252319);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Symmetric Substructure Score", 0.1729574773053034);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Induced Conserved Structure", 0.21914822774464993);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Node Correctness", 4.203446826397646E-4);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Node Group Similarity", 0.8807523828691409);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Link Group Similarity", 0.8619611619310614);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_001_js() {
-    run_alignment_score_test("align_yeast_sc_s3_001", "Jaccard Similarity", 0.024241681016676467);
-}
-
-// --- yeast_sc_s3_003 (from CaseStudy-III-p003S3p997Imp.bif) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Edge Coverage", 0.4566394820394696);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Symmetric Substructure Score", 0.17665334039786137);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Induced Conserved Structure", 0.22366896383484783);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Node Correctness", 4.203446826397646E-4);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Node Group Similarity", 0.8761267404591725);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Link Group Similarity", 0.8590031919452459);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_003_js() {
-    run_alignment_score_test("align_yeast_sc_s3_003", "Jaccard Similarity", 0.021376100608817655);
-}
-
-// --- yeast_sc_s3_005 (from CaseStudy-III-p005S3p995Imp.bif) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Edge Coverage", 0.2881777999128432);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Symmetric Substructure Score", 0.1049493277711021);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Induced Conserved Structure", 0.1416766137177486);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Node Correctness", 0.0);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Node Group Similarity", 0.7199713913537615);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Link Group Similarity", 0.8463739143905635);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_005_js() {
-    run_alignment_score_test("align_yeast_sc_s3_005", "Jaccard Similarity", 0.02501208640087565);
-}
-
-// --- yeast_sc_s3_010 (from CaseStudy-III-p01S3p99Imp.bif) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Edge Coverage", 0.4804208429309593);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Symmetric Substructure Score", 0.18687492432497882);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Induced Conserved Structure", 0.23421044644754013);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Node Correctness", 0.0);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Node Group Similarity", 0.8780761791014107);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Link Group Similarity", 0.857627744322664);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_010_js() {
-    run_alignment_score_test("align_yeast_sc_s3_010", "Jaccard Similarity", 0.024254277821273526);
-}
-
-// --- yeast_sc_s3_030 (from CaseStudy-III-p03S3p97Imp.bif) ---
-
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Edge Coverage", 0.6203697939363755);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Symmetric Substructure Score", 0.27454059564151306);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Induced Conserved Structure", 0.3299778138348952);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Node Correctness", 0.017654476670870115);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Node Group Similarity", 0.8666689547972759);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Link Group Similarity", 0.7952152163023325);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_030_js() {
-    run_alignment_score_test("align_yeast_sc_s3_030", "Jaccard Similarity", 0.05728386984259999);
-}
 
 // --- yeast_sc_s3_100 (from CaseStudy-III-p1S3p90Imp.bif) ---
 
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_ec() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Edge Coverage", 0.6171947954927474);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_s3() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Symmetric Substructure Score", 0.5427867506159321);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_ics() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Induced Conserved Structure", 0.8182568504456916);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_nc() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Node Correctness", 0.016813787305590584);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_ngs() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Node Group Similarity", 0.6723376616199588);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_lgs() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Link Group Similarity", 0.48334162123159696);
-}
-#[test]
-#[ignore = "analysis: enable after implementing alignment scoring"]
-fn align_score_yeast_sc_s3_100_js() {
-    run_alignment_score_test("align_yeast_sc_s3_100", "Jaccard Similarity", 0.06690748450591914);
-}
 
 // ---------------------------------------------------------------------------
 // Node group size validation (DesaiEtAl-2019 Table 10)

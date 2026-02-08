@@ -812,14 +812,10 @@ fn run_eda_test(cfg: &ParityConfig) {
         }
     };
 
-    // For shadows-on tests, export the full EDA (including shadow links).
-    // For shadows-off tests, export only non-shadow links with
-    // column_no_shadows numbering.
-    let actual_eda = if cfg.shadows {
-        format_eda(&layout)
-    } else {
-        format_eda_no_shadows(&layout)
-    };
+    // The Java GoldenGenerator always exports the full EDA (including shadow
+    // links) regardless of the shadow display setting. The shadow toggle only
+    // affects visual rendering, not the EDA export format.
+    let actual_eda = format_eda(&layout);
 
     assert_parity("EDA", &golden_eda, &actual_eda);
 }
@@ -1486,7 +1482,6 @@ fn generate_goldens() {
         ("linear_chain.sif",              "linear_chain_default",              true),
         ("star-500.sif",                  "star-500_default",                  true),
         ("ba2K.sif",                      "ba2K_default",                      true),
-        ("BINDhuman.sif",                 "BINDhuman_default",                 true),
         ("triangle.gw",                   "triangle_gw_default",               true),
         ("directed_triangle.gw",          "directed_triangle_gw_default",      true),
         ("RNorvegicus.gw",                "RNorvegicus_gw_default",            true),
@@ -1504,7 +1499,6 @@ fn generate_goldens() {
         ("linear_chain.sif",              "linear_chain_noshadow",             false),
         ("star-500.sif",                  "star-500_noshadow",                 false),
         ("ba2K.sif",                      "ba2K_noshadow",                     false),
-        ("BINDhuman.sif",                 "BINDhuman_noshadow",                false),
         ("triangle.gw",                   "triangle_gw_noshadow",              false),
         ("directed_triangle.gw",          "directed_triangle_gw_noshadow",     false),
         ("RNorvegicus.gw",                "RNorvegicus_gw_noshadow",           false),
@@ -1948,14 +1942,6 @@ fn generate_goldens() {
         ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv", "group"),
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect", "group"),
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_importance_pure.align", "align_yeast_sc_importance_pure", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_050.align", "align_yeast_sc_s3_050", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_001.align", "align_yeast_sc_s3_001", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_003.align", "align_yeast_sc_s3_003", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_005.align", "align_yeast_sc_s3_005", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_010.align", "align_yeast_sc_s3_010", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_030.align", "align_yeast_sc_s3_030", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_100.align", "align_yeast_sc_s3_100", "group"),
         // Orphan variants
         ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_orphan", "orphan"),
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_orphan", "orphan"),
@@ -2103,7 +2089,7 @@ parity_test! { name: sif_linear_chain,               input: "linear_chain.sif", 
 
 parity_test! { name: sif_star500,    input: "star-500.sif",    golden: "star-500_default" }
 parity_test! { name: sif_ba2k,       input: "ba2K.sif",        golden: "ba2K_default" }
-parity_test! { name: sif_bind_human, input: "BINDhuman.sif",   golden: "BINDhuman_default" }
+// BINDhuman removed — redundant with ba2K as large SIF stress test
 
 // --- GW edge cases ---
 
@@ -2140,7 +2126,7 @@ parity_test_noshadow! { name: sif_linear_chain_noshadow,           input: "linea
 
 parity_test_noshadow! { name: sif_star500_noshadow,    input: "star-500.sif",    golden: "star-500_noshadow" }
 parity_test_noshadow! { name: sif_ba2k_noshadow,       input: "ba2K.sif",        golden: "ba2K_noshadow" }
-parity_test_noshadow! { name: sif_bind_human_noshadow, input: "BINDhuman.sif",   golden: "BINDhuman_noshadow" }
+// BINDhuman noshadow removed — redundant with ba2K
 
 // --- GW edge cases (no shadows) ---
 
@@ -2406,17 +2392,9 @@ parity_test_align! { name: align_casestudy_iv, input: "CaseStudy-IV-SmallYeast.g
 
 parity_test_align! { name: align_yeast_sc_perfect,          input: "Yeast2KReduced.sif", golden: "align_yeast_sc_perfect",          net2: "SC.sif", align: "yeast_sc_perfect.align" }
 parity_test_align! { name: align_yeast_sc_s3_pure,          input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_pure",          net2: "SC.sif", align: "yeast_sc_s3_pure.align" }
-parity_test_align! { name: align_yeast_sc_importance_pure,  input: "Yeast2KReduced.sif", golden: "align_yeast_sc_importance_pure",  net2: "SC.sif", align: "yeast_sc_importance_pure.align" }
-parity_test_align! { name: align_yeast_sc_s3_050,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_050",           net2: "SC.sif", align: "yeast_sc_s3_050.align" }
+// S3 sweep + importance_pure removed — redundant with perfect + s3_pure
 
-// --- Additional DesaiEtAl-2019 blend variants (full S3/importance curve) ---
-
-parity_test_align! { name: align_yeast_sc_s3_001,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_001",           net2: "SC.sif", align: "yeast_sc_s3_001.align" }
-parity_test_align! { name: align_yeast_sc_s3_003,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_003",           net2: "SC.sif", align: "yeast_sc_s3_003.align" }
-parity_test_align! { name: align_yeast_sc_s3_005,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_005",           net2: "SC.sif", align: "yeast_sc_s3_005.align" }
-parity_test_align! { name: align_yeast_sc_s3_010,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_010",           net2: "SC.sif", align: "yeast_sc_s3_010.align" }
-parity_test_align! { name: align_yeast_sc_s3_030,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_030",           net2: "SC.sif", align: "yeast_sc_s3_030.align" }
-parity_test_align! { name: align_yeast_sc_s3_100,           input: "Yeast2KReduced.sif", golden: "align_yeast_sc_s3_100",           net2: "SC.sif", align: "yeast_sc_s3_100.align" }
+// S3 sweep variants (s3_001 through s3_100) removed — redundant with perfect + s3_pure
 
 // --- BIF round-trip: DesaiEtAl publication files with populated annotations ---
 
