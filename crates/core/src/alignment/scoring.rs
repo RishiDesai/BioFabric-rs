@@ -164,6 +164,10 @@ impl AlignmentScores {
     pub fn with_full_evaluation(
         merged: &MergedNetwork,
         perfect_merged: &MergedNetwork,
+        g1: &crate::model::Network,
+        g2: &crate::model::Network,
+        alignment: &crate::io::align::AlignmentMap,
+        perfect_alignment: &crate::io::align::AlignmentMap,
         monitor: &dyn ProgressMonitor,
     ) -> Self {
         use super::groups::NodeGroupMap;
@@ -188,8 +192,13 @@ impl AlignmentScores {
             Self::link_group_ratio_vectors(merged, perfect_merged);
         scores.lgs = Some(angular_similarity(&main_lgs_vec, &perfect_lgs_vec));
 
-        // JS
-        scores.js = Some(JaccardSimilarity::average_score(merged));
+        // JS (Java-equivalent score based on original graphs + alignments)
+        scores.js = Some(JaccardSimilarity::average_score_with_alignments(
+            g1,
+            g2,
+            alignment,
+            perfect_alignment,
+        ));
 
         scores
     }

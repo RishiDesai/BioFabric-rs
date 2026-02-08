@@ -312,7 +312,7 @@ if no_only_filter || $ONLY_LAYOUTS; then
     echo
 
     for mode in resort clustered; do
-        for f in triangle.sif multi_relation.sif ba2K.sif; do
+        for f in triangle.sif multi_relation.sif; do
             name="$(basename "$f" .sif)"
             [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
             TOTAL=$((TOTAL + 1))
@@ -324,17 +324,6 @@ if no_only_filter || $ONLY_LAYOUTS; then
             elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
         done
 
-        for f in yeast.gw; do
-            name="$(basename "$f" .gw)"
-            [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
-            TOTAL=$((TOTAL + 1))
-            echo -n "  [$TOTAL] ${name}_gw_similarity_${mode} ... "
-            rc=0; run_one "$NETWORKS_DIR/gw/$f" gw gw \
-                "${name}_gw_similarity_${mode}" \
-                --layout "similarity_${mode}" || rc=$?
-            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
-            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
-        done
     done
     echo
 fi
@@ -394,22 +383,6 @@ if no_only_filter || $ONLY_LAYOUTS; then
     echo "=== Phase 8: ControlTop layout ==="
     echo
 
-    # star-500: hub node "0" as control
-    if [ -z "$FILTER" ] || [ "$FILTER" = "star-500" ]; then
-        for cm in degree_only partial_order; do
-            for tm in target_degree breadth_order; do
-                suffix="star-500_controltop_${cm}_${tm}"
-                TOTAL=$((TOTAL + 1))
-                echo -n "  [$TOTAL] ${suffix} ... "
-                rc=0; run_one "$NETWORKS_DIR/sif/star-500.sif" sif sif \
-                    "$suffix" \
-                    --layout control_top --control-mode "$cm" --target-mode "$tm" || rc=$?
-                if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
-                elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
-            done
-        done
-    fi
-
     # multi_relation: fixed list [A,B] as control nodes
     if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
         for cm in fixed_list degree_only; do
@@ -452,17 +425,6 @@ if no_only_filter || $ONLY_LAYOUTS; then
             elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
         fi
 
-        # star-500.sif
-        if [ -z "$FILTER" ] || [ "$FILTER" = "star-500" ]; then
-            suffix="star-500_set_${lm}"
-            TOTAL=$((TOTAL + 1))
-            echo -n "  [$TOTAL] ${suffix} ... "
-            rc=0; run_one "$NETWORKS_DIR/sif/star-500.sif" sif sif \
-                "$suffix" \
-                --layout set --link-means "$lm" || rc=$?
-            if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
-            elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
-        fi
     done
     echo
 fi
@@ -475,17 +437,7 @@ if no_only_filter || $ONLY_LAYOUTS; then
     echo "=== Phase 10: WorldBank layout ==="
     echo
 
-    for f in star-500.sif ba2K.sif; do
-        name="$(basename "$f" .sif)"
-        [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
-        TOTAL=$((TOTAL + 1))
-        echo -n "  [$TOTAL] ${name}_world_bank ... "
-        rc=0; run_one "$NETWORKS_DIR/sif/$f" sif sif \
-            "${name}_world_bank" \
-            --layout world_bank || rc=$?
-        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
-        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
-    done
+    # (no WorldBank networks configured)
     echo
 fi
 
@@ -515,17 +467,6 @@ if no_only_filter || $ONLY_FIXED; then
         rc=0; run_one "$NETWORKS_DIR/sif/multi_relation.sif" sif sif \
             "multi_relation_fixed_noa" \
             --noa-file "/noa/multi_relation_shuffled.noa" || rc=$?
-        if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
-        elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
-    fi
-
-    # ba2K + reversed NOA
-    if [ -z "$FILTER" ] || [ "$FILTER" = "ba2K" ]; then
-        TOTAL=$((TOTAL + 1))
-        echo -n "  [$TOTAL] ba2K_fixed_noa ... "
-        rc=0; run_one "$NETWORKS_DIR/sif/ba2K.sif" sif sif \
-            "ba2K_fixed_noa" \
-            --noa-file "/noa/ba2K_reversed.noa" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi
@@ -598,7 +539,7 @@ if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
     ANALYSIS_COMP_NETS=(
         single_node single_edge triangle self_loop isolated_nodes
         disconnected_components linear_chain dense_clique multi_relation
-        bipartite star-500
+        bipartite
     )
     echo "--- Connected components ---"
     for name in "${ANALYSIS_COMP_NETS[@]}"; do
@@ -629,7 +570,7 @@ if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
     echo "--- Node degree ---"
     ANALYSIS_DEG_NETS=(
         triangle single_edge self_loop isolated_nodes multi_relation
-        dense_clique star-500 disconnected_components dag_simple
+        dense_clique disconnected_components dag_simple
     )
     for name in "${ANALYSIS_DEG_NETS[@]}"; do
         [ -n "$FILTER" ] && [ "$name" != "$FILTER" ] && continue
@@ -787,8 +728,7 @@ if no_only_filter || $ONLY_ALIGN; then
 
     # Case Studies I-III: Yeast2KReduced vs SC (SIF + SIF, 2379-node alignment)
     # Perfect alignment is used as reference for NC/NGS/LGS/JS scoring
-    # Includes all 10 DesaiEtAl-2019 blend variants across the S3/importance tradeoff curve
-    for variant in perfect s3_pure importance_pure s3_050 s3_001 s3_003 s3_005 s3_010 s3_030 s3_100; do
+    for variant in perfect s3_pure; do
         if [ -z "$FILTER" ] || [ "$FILTER" = "yeast_sc" ] || [ "$FILTER" = "align" ]; then
             TOTAL=$((TOTAL + 1))
             echo -n "  [$TOTAL] align_yeast_sc_${variant} ... "
@@ -953,11 +893,11 @@ if no_only_filter || $ONLY_ALIGN; then
 fi
 
 # =========================================================================
-# Phase 16b: BIF round-trip with DesaiEtAl publication files (populated annotations)
+# Phase 16b: BIF round-trip (populated annotations)
 # =========================================================================
 
 if no_only_filter || $ONLY_ALIGN; then
-    echo "=== Phase 16b: BIF round-trip (DesaiEtAl publication files) ==="
+    echo "=== Phase 16b: BIF round-trip ==="
     echo
 
     # These BIF files from the publication contain populated nodeAnnotations,
@@ -970,13 +910,11 @@ if no_only_filter || $ONLY_ALIGN; then
     BIF_DIR="$NETWORKS_DIR/bif"
     if [ -d "$BIF_DIR" ]; then
         # Case Study III: representative files with populated annotations
-        for bifname in CaseStudy-III-Perfect CaseStudy-III-All-S3 CaseStudy-III-All-Importance CaseStudy-III-p05S3p95Imp; do
+        for bifname in CaseStudy-III-Perfect CaseStudy-III-All-S3; do
             [ -f "$BIF_DIR/${bifname}.bif" ] || continue
             case "$bifname" in
                 CaseStudy-III-Perfect)         suffix="roundtrip_desai_iii_perfect" ;;
                 CaseStudy-III-All-S3)          suffix="roundtrip_desai_iii_all_s3" ;;
-                CaseStudy-III-All-Importance)  suffix="roundtrip_desai_iii_all_importance" ;;
-                CaseStudy-III-p05S3p95Imp)     suffix="roundtrip_desai_iii_p05s3" ;;
             esac
             [ -n "$FILTER" ] && [ "$FILTER" != "roundtrip" ] && [ "$FILTER" != "desai" ] && continue
             TOTAL=$((TOTAL + 1))

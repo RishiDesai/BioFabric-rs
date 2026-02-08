@@ -120,11 +120,29 @@ pub fn write_session_writer<W: Write>(
 
     // -- Build helper maps --
 
-    // NID map: NodeId → sequential integer (network insertion order)
-    let nid_map: IndexMap<NodeId, usize> = network
-        .node_ids()
+    // NID map: NodeId → sequential integer
+    // Alignment sessions (merged IDs with "::") are ordered by G1/G2 parts
+    // to match Java's alignment node ID assignment.
+    let mut nid_ids: Vec<NodeId> = network.node_ids().cloned().collect();
+    let has_alignment_ids = nid_ids.iter().any(|id| id.as_str().contains("::"));
+    if has_alignment_ids {
+        nid_ids.sort_by(|a, b| {
+            let (a_g1, a_g2) = split_alignment_id(a.as_str());
+            let (b_g1, b_g2) = split_alignment_id(b.as_str());
+            let a_group = alignment_nid_group(a_g1, a_g2);
+            let b_group = alignment_nid_group(b_g1, b_g2);
+            a_group
+                .cmp(&b_group)
+                .then_with(|| a_g1.cmp(b_g1))
+                .then_with(|| a_g2.cmp(b_g2))
+        });
+    } else {
+        nid_ids.sort();
+    }
+    let nid_map: IndexMap<NodeId, usize> = nid_ids
+        .into_iter()
         .enumerate()
-        .map(|(i, id)| (id.clone(), i))
+        .map(|(i, id)| (id, i))
         .collect();
 
     // Row → NodeId map
@@ -244,6 +262,23 @@ fn format_java_double(v: f64) -> String {
         s
     } else {
         format!("{}.0", s)
+    }
+}
+
+fn split_alignment_id(id: &str) -> (&str, &str) {
+    let mut parts = id.splitn(2, "::");
+    let g1 = parts.next().unwrap_or("");
+    let g2 = parts.next().unwrap_or("");
+    (g1, g2)
+}
+
+fn alignment_nid_group(g1: &str, g2: &str) -> u8 {
+    if !g1.is_empty() && !g2.is_empty() {
+        0 // aligned (purple)
+    } else if !g1.is_empty() {
+        1 // g1-only (blue)
+    } else {
+        2 // g2-only (red)
     }
 }
 

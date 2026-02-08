@@ -32,46 +32,47 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | `output.bif` | Full XML session | Everything: colors, drain zones, columns, annotations, plugin data |
 | `output.scores` | `metric\tvalue` (tab-separated) | Alignment scoring metrics (EC, S3, ICS, NC, NGS, LGS, JS) |
 
-## Test suite overview (446 test functions)
+## Test suite overview (380 test functions)
 
 | Phase | What | Tests | Functions |
 |-------|------|-------|-----------|
-| P1 | Default layout, shadows ON | 17 | 51 |
-| P2 | Default layout, shadows OFF | 17 | 51 |
+| P1 | Default layout, shadows ON | 12 | 36 |
+| P2 | Default layout, shadows OFF | 12 | 36 |
 | P3 | Link grouping (PER_NODE + PER_NETWORK) | 4 | 12 |
-| P4 | XML round-trip | 10 | 10 |
-| P5 | NodeSimilarity layout (resort + clustered) | 8 | 24 |
+| P4 | XML round-trip | 7 | 7 |
+| P5 | NodeSimilarity layout (resort mode) | 2 | 6 |
+| P5b | NodeSimilarity layout (clustered mode) | 2 | 6 |
 | P6 | HierDAG layout (pointUp true/false) | 6 | 18 |
 | P7 | NodeCluster layout | 1 | 3 |
-| P8 | ControlTop layout (4 mode combos) | 8 | 24 |
-| P9 | SetLayout (BELONGS_TO + CONTAINS) | 4 | 12 |
-| P10 | WorldBank layout | 2 | 6 |
-| P11 | Fixed-order import (NOA/EDA input) | 4 | 12 |
+| P8 | ControlTop layout (4 mode combos) | 4 | 12 |
+| P9 | SetLayout (BELONGS_TO + CONTAINS) | 2 | 6 |
+| P10 | WorldBank layout | 0 | 0 |
+| P11 | Fixed-order import (NOA/EDA input) | 3 | 9 |
 | P12 | Subnetwork extraction | 3 | 9 |
-| P13 | Analysis: cycle detection + Jaccard | 10 | 10 |
-| P13b | Analysis: components + topo sort + degree | 22 | 22 |
+| P13 | Analysis: cycle detection + Jaccard | 9 | 9 |
+| P13b | Analysis: components + topo sort + degree | 20 | 20 |
 | P14 | Display option permutations | 8 | 8 |
 | P15 | Alignment — toy networks (GROUP view) | 2 | 6 |
 | P16 | Alignment — realistic PPI (GROUP view) | 11 | 33 |
-| P16b | BIF round-trip: DesaiEtAl pub files (annotations) | 5 | 5 |
+| P16b | BIF round-trip: DesaiEtAl pub files (annotations) | 3 | 3 |
 | P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 10 | 30 |
 | — | Analysis: cycle detection | — | 7 |
-| — | Analysis: Jaccard similarity | — | 5 |
+| — | Analysis: Jaccard similarity | — | 4 |
 | — | Analysis: subnetwork extraction | — | 3 |
-| — | Analysis: connected components | — | 11 |
+| — | Analysis: connected components | — | 10 |
 | — | Analysis: topological sort | — | 3 |
-| — | Analysis: node degree | — | 9 |
-| — | Analysis: first-neighbor expansion | — | 7 |
+| — | Analysis: node degree | — | 8 |
+| — | Analysis: first-neighbor expansion | — | 5 |
 | — | Analysis: alignment scoring (all 7 metrics × 11 scenarios) | — | 77 |
-| **Total** | | **152 manifest + 122 analysis** | **324 parity + 122 analysis = 446** |
+| **Total** | | **119 manifest + 117 analysis** | **263 parity + 117 analysis = 380** |
 
 Each parity test generates **three** independent test functions (NOA, EDA,
 BIF) so agents can make incremental progress — get parsing right first (NOA
 passes), then edge layout (EDA passes), then full XML export (BIF passes).
 
-## Test input files (56 files)
+## Test input files (43 files)
 
-### SIF networks (20 files)
+### SIF networks (17 files)
 
 | File | Nodes | Edges | Purpose |
 |------|-------|-------|---------|
@@ -90,21 +91,16 @@ passes), then edge layout (EDA passes), then full XML export (BIF passes).
 | `bipartite.sif` | 6 | 6 | Bipartite graph for SetLayout |
 | `align_net1.sif` | 3 | 3 | Toy alignment network 1 |
 | `align_net2.sif` | 3 | 2 | Toy alignment network 2 |
-| `star-500.sif` | 501 | 500 | Hub stress test |
-| `ba2K.sif` | 2000 | ~12K | Power-law stress test |
-| `BINDhuman.sif` | 19333 | ~39K | Large-scale stress test |
 | `Yeast2KReduced.sif` | ~2.4K | ~16K | Alignment source (DesaiEtAl-2019) |
 | `SC.sif` | ~6.6K | ~77K | Alignment target (DesaiEtAl-2019) |
 
-### GW networks (7 files)
+### GW networks (5 files)
 
 | File | Nodes | Edges | Purpose |
 |------|-------|-------|---------|
 | `triangle.gw` | 3 | 3 | GW parser, default relation |
 | `directed_triangle.gw` | 3 | 3 | Directed GW, named relations |
-| `RNorvegicus.gw` | ~1.5K | ~1.5K | Small real PPI (SANA) |
 | `CElegans.gw` | ~3K | ~5K | Medium real PPI (SANA) |
-| `yeast.gw` | ~2.4K | ~16K | Large real PPI (SANA) |
 | `CaseStudy-IV-SmallYeast.gw` | 1004 | ~8.3K | Alignment source (DesaiEtAl-2019) |
 | `CaseStudy-IV-LargeYeast.gw` | 1004 | ~10K | Alignment target (DesaiEtAl-2019) |
 
@@ -117,39 +113,22 @@ passes), then edge layout (EDA passes), then full XML export (BIF passes).
 | `casestudy_iv.align` | 1004 | Case Study IV: SmallYeast ↔ LargeYeast |
 | `yeast_sc_perfect.align` | 2379 | Known ground-truth alignment |
 | `yeast_sc_s3_pure.align` | 2379 | Pure structural objective (S3=1.0) |
-| `yeast_sc_importance_pure.align` | 2379 | Pure biological objective (importance=1.0) |
-| `yeast_sc_s3_001.align` | 2379 | Blended (S3=0.001, importance=0.999) |
-| `yeast_sc_s3_003.align` | 2379 | Blended (S3=0.003, importance=0.997) |
-| `yeast_sc_s3_005.align` | 2379 | Blended (S3=0.005, importance=0.995) |
-| `yeast_sc_s3_010.align` | 2379 | Blended (S3=0.010, importance=0.990) |
-| `yeast_sc_s3_030.align` | 2379 | Blended (S3=0.030, importance=0.970) |
-| `yeast_sc_s3_050.align` | 2379 | Blended (S3=0.05, importance=0.95) |
-| `yeast_sc_s3_100.align` | 2379 | Blended (S3=0.100, importance=0.900) |
 
-### BIF files for round-trip testing (11 files)
+### BIF files for round-trip testing (3 files)
 
 | File | Source | Annotation types |
 |------|--------|------------------|
 | `CaseStudy-III-Perfect.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
 | `CaseStudy-III-All-S3.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-All-Importance.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p001S3p999Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p003S3p997Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p005S3p995Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p01S3p99Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p03S3p97Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p05S3p95Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
-| `CaseStudy-III-p1S3p90Imp.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
 | `CaseStudy-IV.bif` | DesaiEtAl-2019 | Cycle boundary annotations |
 
-### Other input files (5 files)
+### Other input files (4 files)
 
 | File | Format | Purpose |
 |------|--------|---------|
 | `multi_relation_clusters.na` | Node attribute | Cluster assignments for NodeClusterLayout |
 | `triangle_reversed.noa` | Node order | Fixed node ordering (reversed) |
 | `multi_relation_shuffled.noa` | Node order | Fixed node ordering (shuffled) |
-| `ba2K_reversed.noa` | Node order | Fixed node ordering (reversed, large) |
 | `triangle_reversed.eda` | Edge order | Fixed edge ordering (reversed) |
 
 ---
@@ -191,9 +170,6 @@ All 7 alignment quality metrics are tested across 11 alignment scenarios
 | JS (Jaccard Similarity) | Yes |
 
 Scenarios: `casestudy_iv`, `yeast_sc_perfect`, `yeast_sc_s3_pure`,
-`yeast_sc_importance_pure`, `yeast_sc_s3_050`, `yeast_sc_s3_001`,
-`yeast_sc_s3_003`, `yeast_sc_s3_005`, `yeast_sc_s3_010`,
-`yeast_sc_s3_030`, `yeast_sc_s3_100`. Each produces an
 `output.scores` file (tab-separated `metric\tvalue` lines).
 
 The 10 Yeast↔SC variants use the **same two networks** with **different
@@ -418,6 +394,5 @@ cargo test --test parity_tests -- --include-ignored gw_
 | P19 | Alignment ORPHAN view | `align_casestudy_iv_orphan_noa` |
 | P20 | Alignment CYCLE view | `align_casestudy_iv_cycle_noa` |
 | P21 | Alignment PerfectNG modes | `align_yeast_sc_perfect_ng_nc_noa` |
-| P22 | Realistic alignment at scale (full tradeoff curve) | `align_yeast_sc_s3_001_noa` through `align_yeast_sc_s3_100_noa` |
-| P23 | BIF round-trip with populated annotations | `roundtrip_desai_iii_perfect_bif` |
-| P24 | Speed benchmarks (Rust vs Java) | `test_speed_ba2K_default` (see `tests/bench/`) |
+| P22 | BIF round-trip with populated annotations | `roundtrip_desai_iii_perfect_bif` |
+| P23 | Speed benchmarks (Rust vs Java) | `test_speed_SC_default` (see `tests/bench/`) |

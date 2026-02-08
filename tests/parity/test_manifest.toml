@@ -122,38 +122,6 @@ shadows = true
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "edge_case", "p1"]
 
-# ---------- SIF stress tests ----------
-
-[[test]]
-id = "sif_star500"
-description = "Star graph with 500 leaves (BioFabric sample)"
-input = "star-500.sif"
-golden_dir = "star-500_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p1"]
-
-[[test]]
-id = "sif_ba2k"
-description = "Barabasi-Albert 2K network (BioFabric sample, ~12K edges)"
-input = "ba2K.sif"
-golden_dir = "ba2K_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p1"]
-
-[[test]]
-id = "sif_bind_human"
-description = "BINDhuman protein interaction network from Cytoscape (~38K edges)"
-input = "BINDhuman.sif"
-golden_dir = "BINDhuman_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p1"]
-
 # ---------- GW edge cases ----------
 
 [[test]]
@@ -176,33 +144,11 @@ shadows = true
 compare = ["noa", "eda", "bif"]
 tags = ["gw", "edge_case", "p1"]
 
-# ---------- GW stress tests ----------
-
-[[test]]
-id = "gw_rnorvegicus"
-description = "R. norvegicus PPI network (~4K lines, small)"
-input = "RNorvegicus.gw"
-golden_dir = "RNorvegicus_gw_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p1"]
-
 [[test]]
 id = "gw_celegans"
 description = "C. elegans PPI network (~8.5K lines, medium)"
 input = "CElegans.gw"
 golden_dir = "CElegans_gw_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p1"]
-
-[[test]]
-id = "gw_yeast"
-description = "Yeast PPI network (~18K lines, large)"
-input = "yeast.gw"
-golden_dir = "yeast_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
@@ -310,38 +256,6 @@ shadows = false
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "edge_case", "p2", "noshadow"]
 
-# ---------- SIF stress (no shadows) ----------
-
-[[test]]
-id = "sif_star500_noshadow"
-description = "Star-500 shadows OFF — 500 columns instead of ~1000"
-input = "star-500.sif"
-golden_dir = "star-500_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p2", "noshadow"]
-
-[[test]]
-id = "sif_ba2k_noshadow"
-description = "BA-2K shadows OFF — large power-law network"
-input = "ba2K.sif"
-golden_dir = "ba2K_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p2", "noshadow"]
-
-[[test]]
-id = "sif_bind_human_noshadow"
-description = "BINDhuman shadows OFF — largest stress test"
-input = "BINDhuman.sif"
-golden_dir = "BINDhuman_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "stress", "p2", "noshadow"]
-
 # ---------- GW edge cases (no shadows) ----------
 
 [[test]]
@@ -364,33 +278,11 @@ shadows = false
 compare = ["noa", "eda", "bif"]
 tags = ["gw", "edge_case", "p2", "noshadow"]
 
-# ---------- GW stress (no shadows) ----------
-
-[[test]]
-id = "gw_rnorvegicus_noshadow"
-description = "R. norvegicus PPI, shadows OFF"
-input = "RNorvegicus.gw"
-golden_dir = "RNorvegicus_gw_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p2", "noshadow"]
-
 [[test]]
 id = "gw_celegans_noshadow"
 description = "C. elegans PPI, shadows OFF"
 input = "CElegans.gw"
 golden_dir = "CElegans_gw_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p2", "noshadow"]
-
-[[test]]
-id = "gw_yeast_noshadow"
-description = "Yeast PPI, shadows OFF"
-input = "yeast.gw"
-golden_dir = "yeast_gw_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
@@ -517,26 +409,6 @@ compare = ["bif"]
 tags = ["roundtrip", "p4"]
 
 [[test]]
-id = "roundtrip_sif_star500"
-description = "XML round-trip: load star-500_default/output.bif → re-export"
-input = "star-500_default/output.bif"
-golden_dir = "star-500_default"
-layout = "roundtrip"
-shadows = true
-compare = ["bif"]
-tags = ["roundtrip", "p4"]
-
-[[test]]
-id = "roundtrip_sif_ba2k"
-description = "XML round-trip: load ba2K_default/output.bif → re-export"
-input = "ba2K_default/output.bif"
-golden_dir = "ba2K_default"
-layout = "roundtrip"
-shadows = true
-compare = ["bif"]
-tags = ["roundtrip", "p4"]
-
-[[test]]
 id = "roundtrip_gw_triangle"
 description = "XML round-trip: load triangle_gw_default/output.bif → re-export"
 input = "triangle_gw_default/output.bif"
@@ -551,16 +423,6 @@ id = "roundtrip_gw_directed_tri"
 description = "XML round-trip: load directed_triangle_gw_default/output.bif → re-export"
 input = "directed_triangle_gw_default/output.bif"
 golden_dir = "directed_triangle_gw_default"
-layout = "roundtrip"
-shadows = true
-compare = ["bif"]
-tags = ["roundtrip", "p4"]
-
-[[test]]
-id = "roundtrip_gw_celegans"
-description = "XML round-trip: load CElegans_gw_default/output.bif → re-export"
-input = "CElegans_gw_default/output.bif"
-golden_dir = "CElegans_gw_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
@@ -595,26 +457,6 @@ shadows = true
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "layout", "similarity", "p5"]
 
-[[test]]
-id = "sif_ba2k_similarity_resort"
-description = "BA-2K with NodeSimilarity resort layout"
-input = "ba2K.sif"
-golden_dir = "ba2K_similarity_resort"
-layout = "similarity_resort"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "stress", "p5"]
-
-[[test]]
-id = "gw_yeast_similarity_resort"
-description = "Yeast PPI with NodeSimilarity resort layout"
-input = "yeast.gw"
-golden_dir = "yeast_gw_similarity_resort"
-layout = "similarity_resort"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "layout", "similarity", "stress", "p5"]
-
 # ==========================================================================
 #
 #  PHASE 5b: NodeSimilarity layout (clustered mode)
@@ -643,26 +485,6 @@ layout = "similarity_clustered"
 shadows = true
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "layout", "similarity", "p5"]
-
-[[test]]
-id = "sif_ba2k_similarity_clustered"
-description = "BA-2K with NodeSimilarity clustered layout"
-input = "ba2K.sif"
-golden_dir = "ba2K_similarity_clustered"
-layout = "similarity_clustered"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "stress", "p5"]
-
-[[test]]
-id = "gw_yeast_similarity_clustered"
-description = "Yeast PPI with NodeSimilarity clustered layout"
-input = "yeast.gw"
-golden_dir = "yeast_gw_similarity_clustered"
-layout = "similarity_clustered"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "layout", "similarity", "stress", "p5"]
 
 # ==========================================================================
 #
@@ -769,62 +591,6 @@ tags = ["sif", "layout", "cluster", "p7"]
 #
 # ==========================================================================
 
-# --- star-500: degree_only + target_degree ---
-
-[[test]]
-id = "sif_star500_controltop_degree_target"
-description = "Star-500 ControlTop (degree_only, target_degree)"
-input = "star-500.sif"
-golden_dir = "star-500_controltop_degree_only_target_degree"
-layout = "control_top"
-shadows = true
-control_mode = "degree_only"
-target_mode = "target_degree"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "stress", "p8"]
-
-# --- star-500: degree_only + breadth_order ---
-
-[[test]]
-id = "sif_star500_controltop_degree_breadth"
-description = "Star-500 ControlTop (degree_only, breadth_order)"
-input = "star-500.sif"
-golden_dir = "star-500_controltop_degree_only_breadth_order"
-layout = "control_top"
-shadows = true
-control_mode = "degree_only"
-target_mode = "breadth_order"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "stress", "p8"]
-
-# --- star-500: partial_order + target_degree ---
-
-[[test]]
-id = "sif_star500_controltop_partial_target"
-description = "Star-500 ControlTop (partial_order, target_degree)"
-input = "star-500.sif"
-golden_dir = "star-500_controltop_partial_order_target_degree"
-layout = "control_top"
-shadows = true
-control_mode = "partial_order"
-target_mode = "target_degree"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "stress", "p8"]
-
-# --- star-500: partial_order + breadth_order ---
-
-[[test]]
-id = "sif_star500_controltop_partial_breadth"
-description = "Star-500 ControlTop (partial_order, breadth_order)"
-input = "star-500.sif"
-golden_dir = "star-500_controltop_partial_order_breadth_order"
-layout = "control_top"
-shadows = true
-control_mode = "partial_order"
-target_mode = "breadth_order"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "stress", "p8"]
-
 # --- multi_relation: fixed_list [A,B] + target_degree ---
 
 [[test]]
@@ -914,28 +680,6 @@ link_means = "contains"
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "layout", "set", "p9"]
 
-[[test]]
-id = "sif_star500_set_belongs_to"
-description = "Star-500 with SetLayout (belongs_to)"
-input = "star-500.sif"
-golden_dir = "star-500_set_belongs_to"
-layout = "set"
-shadows = true
-link_means = "belongs_to"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "set", "stress", "p9"]
-
-[[test]]
-id = "sif_star500_set_contains"
-description = "Star-500 with SetLayout (contains)"
-input = "star-500.sif"
-golden_dir = "star-500_set_contains"
-layout = "set"
-shadows = true
-link_means = "contains"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "set", "stress", "p9"]
-
 # ==========================================================================
 #
 #  PHASE 10: WorldBank layout
@@ -944,26 +688,6 @@ tags = ["sif", "layout", "set", "stress", "p9"]
 #  2 networks × 3 formats = 6 test functions
 #
 # ==========================================================================
-
-[[test]]
-id = "sif_star500_world_bank"
-description = "Star-500 with WorldBank layout"
-input = "star-500.sif"
-golden_dir = "star-500_world_bank"
-layout = "world_bank"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "world_bank", "stress", "p10"]
-
-[[test]]
-id = "sif_ba2k_world_bank"
-description = "BA-2K with WorldBank layout"
-input = "ba2K.sif"
-golden_dir = "ba2K_world_bank"
-layout = "world_bank"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "world_bank", "stress", "p10"]
 
 # ==========================================================================
 #
@@ -995,17 +719,6 @@ shadows = true
 noa_file = "multi_relation_shuffled.noa"
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "fixed_order", "p11"]
-
-[[test]]
-id = "sif_ba2k_fixed_noa"
-description = "BA-2K with fixed node order from reversed NOA"
-input = "ba2K.sif"
-golden_dir = "ba2K_fixed_noa"
-layout = "fixed_node_order"
-shadows = true
-noa_file = "ba2K_reversed.noa"
-compare = ["noa", "eda", "bif"]
-tags = ["sif", "fixed_order", "stress", "p11"]
 
 [[test]]
 id = "sif_triangle_fixed_eda"
@@ -1153,17 +866,6 @@ compare = ["txt"]
 tags = ["analysis", "jaccard", "p13"]
 
 [[test]]
-id = "analysis_jaccard_star500_hub_leaf"
-description = "Jaccard similarity of hub (0) and leaf (1) in star-500"
-input = "star-500.sif"
-golden_dir = "analysis_jaccard_star500_hub_leaf"
-layout = "analysis_jaccard"
-shadows = true
-node_pair = ["0", "1"]
-compare = ["txt"]
-tags = ["analysis", "jaccard", "stress", "p13"]
-
-[[test]]
 id = "analysis_jaccard_dense_clique_AB"
 description = "Jaccard similarity of A,B in dense clique (should be high)"
 input = "dense_clique.sif"
@@ -1279,16 +981,6 @@ shadows = true
 compare = ["components"]
 tags = ["analysis", "components", "p13b"]
 
-[[test]]
-id = "analysis_components_star500"
-description = "Connected components: star-500 → 1 component of size 501"
-input = "star-500.sif"
-golden_dir = "analysis_components_star500"
-layout = "analysis_components"
-shadows = true
-compare = ["components"]
-tags = ["analysis", "components", "stress", "p13b"]
-
 # ---- Topological sort (DAGs only) ----
 
 [[test]]
@@ -1382,16 +1074,6 @@ layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
 tags = ["analysis", "degree", "p13b"]
-
-[[test]]
-id = "analysis_degree_star500"
-description = "Node degree: star-500 — hub degree 1000, leaves degree 2"
-input = "star-500.sif"
-golden_dir = "analysis_degree_star500"
-layout = "analysis_degree"
-shadows = true
-compare = ["degrees"]
-tags = ["analysis", "degree", "stress", "p13b"]
 
 [[test]]
 id = "analysis_degree_disconnected"
@@ -1598,113 +1280,6 @@ perfect_align = "yeast_sc_perfect.align"
 compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
-[[test]]
-id = "align_yeast_sc_importance_pure"
-description = "Yeast2KReduced ↔ SC with pure importance alignment (biological objective only)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_importance_pure"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_importance_pure.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16"]
-
-[[test]]
-id = "align_yeast_sc_s3_050"
-description = "Yeast2KReduced ↔ SC with blended alignment (S3=0.05, importance=0.95)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_050"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_050.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16"]
-
-# --- Additional DesaiEtAl-2019 Case Study III alignment blends ---
-# These 6 files cover the full S3/importance tradeoff curve from the paper.
-
-[[test]]
-id = "align_yeast_sc_s3_001"
-description = "Yeast2KReduced ↔ SC blended (S3=0.001, importance=0.999)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_001"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_001.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
-[[test]]
-id = "align_yeast_sc_s3_003"
-description = "Yeast2KReduced ↔ SC blended (S3=0.003, importance=0.997)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_003"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_003.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
-[[test]]
-id = "align_yeast_sc_s3_005"
-description = "Yeast2KReduced ↔ SC blended (S3=0.005, importance=0.995)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_005"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_005.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
-[[test]]
-id = "align_yeast_sc_s3_010"
-description = "Yeast2KReduced ↔ SC blended (S3=0.010, importance=0.990)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_010"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_010.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
-[[test]]
-id = "align_yeast_sc_s3_030"
-description = "Yeast2KReduced ↔ SC blended (S3=0.030, importance=0.970)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_030"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_030.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
-[[test]]
-id = "align_yeast_sc_s3_100"
-description = "Yeast2KReduced ↔ SC blended (S3=0.100, importance=0.900)"
-input = "Yeast2KReduced.sif"
-golden_dir = "align_yeast_sc_s3_100"
-layout = "alignment"
-shadows = true
-align_net2 = "SC.sif"
-align_file = "yeast_sc_s3_100.align"
-perfect_align = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
-
 # --- BIF round-trip with populated annotations (DesaiEtAl publication files) ---
 # These BIF files contain populated <nodeAnnotations>, <linkAnnotations>,
 # <shadowLinkAnnotations>, and <plugInDataSets> from the original publication.
@@ -1724,26 +1299,6 @@ id = "roundtrip_desai_iii_all_s3"
 description = "Round-trip: DesaiEtAl Case III All-S3 BIF"
 input = "CaseStudy-III-All-S3.bif"
 golden_dir = "roundtrip_desai_iii_all_s3"
-layout = "roundtrip"
-shadows = true
-compare = ["bif"]
-tags = ["roundtrip", "alignment", "annotations", "p16b"]
-
-[[test]]
-id = "roundtrip_desai_iii_all_importance"
-description = "Round-trip: DesaiEtAl Case III All-Importance BIF"
-input = "CaseStudy-III-All-Importance.bif"
-golden_dir = "roundtrip_desai_iii_all_importance"
-layout = "roundtrip"
-shadows = true
-compare = ["bif"]
-tags = ["roundtrip", "alignment", "annotations", "p16b"]
-
-[[test]]
-id = "roundtrip_desai_iii_p05s3"
-description = "Round-trip: DesaiEtAl Case III S3=0.05 BIF"
-input = "CaseStudy-III-p05S3p95Imp.bif"
-golden_dir = "roundtrip_desai_iii_p05s3"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]

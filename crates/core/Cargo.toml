@@ -2,7 +2,7 @@
 name = "biofabric-core"
 description = "Core library for BioFabric network visualization"
 keywords = ["network", "visualization", "graph", "bioinformatics"]
-categories = ["visualization", "science"]
+categories = ["visualization", "network"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true

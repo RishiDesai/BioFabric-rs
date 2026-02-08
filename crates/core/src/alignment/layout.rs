@@ -78,6 +78,29 @@ impl AlignmentNodeLayout {
         }
     }
 
+    /// Build node group annotations in Java's canonical group order.
+    pub fn build_group_node_annotations(groups: &NodeGroupMap) -> AnnotationSet {
+        let mut annots = AnnotationSet::new();
+        let mut min = 0usize;
+
+        for group in &groups.groups {
+            if group.members.is_empty() {
+                continue;
+            }
+            let max = min + group.members.len() - 1;
+            annots.add(Annotation::new(
+                group.tag.0.clone(),
+                min,
+                max,
+                0,
+                group.annot_color.as_str(),
+            ));
+            min += group.members.len();
+        }
+
+        annots
+    }
+
     /// Attach precomputed node groups.
     pub fn with_groups(mut self, groups: NodeGroupMap) -> Self {
         self.groups = Some(groups);
@@ -121,95 +144,130 @@ impl AlignmentNodeLayout {
         params: &LayoutParams,
         monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<Vec<NodeId>> {
-        use crate::layout::default::DefaultNodeLayout;
-        use std::collections::{HashSet, VecDeque};
+        use std::collections::{BTreeMap, BTreeSet};
 
-        let groups = self.groups.as_ref().map(|g| g.clone()).unwrap_or_else(|| {
-            NodeGroupMap::from_merged(&self.merged, monitor)
-        });
+        let groups = self
+            .groups
+            .as_ref()
+            .map(|g| g.clone())
+            .unwrap_or_else(|| NodeGroupMap::from_merged(&self.merged, monitor));
 
-        let mut result: Vec<NodeId> = Vec::new();
-        let mut placed: HashSet<NodeId> = HashSet::new();
+        let mut link_counts: HashMap<NodeId, usize> = HashMap::new();
+        let mut targs_per_source: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        let mut targs_to_go: HashSet<NodeId> = HashSet::new();
 
-        // Build neighbor map from the merged network (all links including shadows)
+        for link in self.merged.network.links() {
+            let src = link.source.clone();
+            let trg = link.target.clone();
+            targs_per_source.entry(src.clone()).or_default().insert(trg.clone());
+            targs_per_source.entry(trg.clone()).or_default().insert(src.clone());
+            targs_to_go.insert(src.clone());
+            targs_to_go.insert(trg.clone());
+            *link_counts.entry(src).or_insert(0) += 1;
+            *link_counts.entry(trg).or_insert(0) += 1;
+        }
+
+        // Neighbor map for degree sorting (unique neighbors)
         let mut neighbor_map: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
         for node_id in self.merged.network.node_ids() {
             neighbor_map.entry(node_id.clone()).or_default();
         }
-        for link in self.merged.network.links() {
-            if link.source != link.target {
-                neighbor_map.entry(link.source.clone()).or_default().insert(link.target.clone());
-                neighbor_map.entry(link.target.clone()).or_default().insert(link.source.clone());
+        for (node, neighbors) in &targs_per_source {
+            neighbor_map
+                .entry(node.clone())
+                .or_default()
+                .extend(neighbors.iter().cloned());
+        }
+
+        let mut class_to_group: Vec<Vec<NodeId>> = vec![Vec::new(); groups.group_count()];
+        for node in self.merged.network.node_ids() {
+            if let Some(idx) = groups.group_index(node) {
+                class_to_group[idx].push(node.clone());
             }
         }
 
-        // Build degree map
-        let mut degree_map: HashMap<NodeId, usize> = HashMap::new();
-        for node_id in self.merged.network.node_ids() {
-            degree_map.insert(node_id.clone(), 0);
+        // Sort each group by decreasing degree (neighbor count), then name
+        for group in &mut class_to_group {
+            group.sort_by(|a, b| {
+                let deg_a = neighbor_map.get(a).map(|n| n.len()).unwrap_or(0);
+                let deg_b = neighbor_map.get(b).map(|n| n.len()).unwrap_or(0);
+                deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
+            });
         }
-        for link in self.merged.network.links() {
-            *degree_map.entry(link.source.clone()).or_insert(0) += 1;
-            *degree_map.entry(link.target.clone()).or_insert(0) += 1;
-        }
 
-        let node_cmp = |a: &NodeId, b: &NodeId| -> std::cmp::Ordering {
-            let deg_a = degree_map.get(a).copied().unwrap_or(0);
-            let deg_b = degree_map.get(b).copied().unwrap_or(0);
-            deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
-        };
+        let mut targets_group: Vec<Vec<NodeId>> = vec![Vec::new(); groups.group_count()];
+        let mut queue_group: Vec<Vec<NodeId>> = vec![Vec::new(); groups.group_count()];
+        let mut left_to_go_group: Vec<Vec<NodeId>> = class_to_group.clone();
 
-        // For each group, BFS within that group's members
-        for group in &groups.groups {
-            let group_members: HashSet<NodeId> = group.members.iter().cloned().collect();
+        let mut curr_group = 0usize;
+        while curr_group < groups.group_count() {
+            if left_to_go_group[curr_group].is_empty() {
+                curr_group += 1;
+                continue;
+            }
 
-            // Sort members by degree desc for BFS start
-            let mut ranked: Vec<NodeId> = group.members
-                .iter()
-                .filter(|n| !placed.contains(*n))
-                .cloned()
-                .collect();
-            ranked.sort_by(|a, b| node_cmp(a, b));
+            if queue_group[curr_group].is_empty() {
+                let head = left_to_go_group[curr_group].remove(0);
+                queue_group[curr_group].push(head);
+            }
 
-            // BFS within this group
-            for start in ranked {
-                if placed.contains(&start) {
+            // Flush queue for current group
+            while let Some(node) = queue_group[curr_group].first().cloned() {
+                queue_group[curr_group].remove(0);
+
+                if targets_group[curr_group].contains(&node) {
                     continue;
                 }
-                let mut queue: VecDeque<NodeId> = VecDeque::new();
-                placed.insert(start.clone());
-                result.push(start.clone());
-                queue.push_back(start);
 
-                while let Some(node_id) = queue.pop_front() {
-                    let mut neighbors: Vec<NodeId> = neighbor_map
-                        .get(&node_id)
-                        .map(|n| {
-                            n.iter()
-                                .filter(|n| !placed.contains(*n) && group_members.contains(*n))
-                                .cloned()
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    neighbors.sort_by(|a, b| node_cmp(a, b));
+                targets_group[curr_group].push(node.clone());
 
-                    for neighbor in neighbors {
-                        if placed.insert(neighbor.clone()) {
-                            result.push(neighbor.clone());
-                            queue.push_back(neighbor);
+                let node_group = groups.group_index(&node).unwrap_or(curr_group);
+                if node_group != curr_group {
+                    return Err(crate::layout::traits::LayoutError::Internal(
+                        "Node of incorrect group in queue".to_string(),
+                    ));
+                }
+
+                // Order children by link count (descending), then name
+                let mut kid_map: BTreeMap<usize, BTreeSet<NodeId>> = BTreeMap::new();
+                if let Some(targs) = targs_per_source.get(&node) {
+                    for kid in targs {
+                        let count = link_counts.get(kid).copied().unwrap_or(0);
+                        kid_map.entry(count).or_default().insert(kid.clone());
+                    }
+                }
+
+                let mut my_kids: Vec<NodeId> = Vec::new();
+                for (_count, per_count) in kid_map.iter().rev() {
+                    for kid in per_count {
+                        if targs_to_go.contains(kid) {
+                            my_kids.push(kid.clone());
                         }
+                    }
+                }
+
+                for kid in my_kids {
+                    let kid_group = groups.group_index(&kid).unwrap_or(curr_group);
+                    if kid_group == curr_group {
+                        if let Some(pos) = left_to_go_group[curr_group]
+                            .iter()
+                            .position(|n| n == &kid)
+                        {
+                            queue_group[curr_group].push(kid.clone());
+                            left_to_go_group[curr_group].remove(pos);
+                            targs_to_go.remove(&kid);
+                        }
+                    } else if !queue_group[kid_group].contains(&kid) {
+                        queue_group[kid_group].push(kid);
                     }
                 }
             }
         }
 
-        // Add any remaining nodes (lone nodes)
-        let mut lone: Vec<NodeId> = self.merged.network.lone_nodes().iter().cloned().collect();
-        lone.sort();
-        for node in lone {
-            if placed.insert(node.clone()) {
-                result.push(node);
-            }
+        // Flatten targets
+        let mut result: Vec<NodeId> = Vec::new();
+        for group in &targets_group {
+            result.extend(group.iter().cloned());
         }
 
         Ok(result)
@@ -492,27 +550,44 @@ impl EdgeLayout for AlignmentEdgeLayout {
         // For all alignment modes, set link groups to the 7 edge type codes
         let link_groups = Self::alignment_link_group_order();
 
-        // Create modified params with alignment link groups and PerNode mode
+        // Create modified params with alignment link groups and PerNetwork mode
         let mut align_params = params.clone();
         align_params.link_groups = Some(link_groups.clone());
-        align_params.layout_mode = LayoutMode::PerNode;
+        align_params.layout_mode = LayoutMode::PerNetwork;
 
         // Use the default edge layout with alignment link groups
         let default_edge = DefaultEdgeLayout::new();
 
         // Override the layout mode on build_data
-        build_data.layout_mode = LayoutMode::PerNode;
+        build_data.layout_mode = LayoutMode::PerNetwork;
 
         let mut layout = default_edge.layout_edges(build_data, &align_params, monitor)?;
 
-        // Set the link group order on the layout
-        layout.link_group_order = link_groups.clone();
+        // Set the link group order on the layout (present relations only)
+        if !layout.link_group_order.is_empty() {
+            let present: std::collections::HashSet<String> =
+                layout.link_group_order.iter().cloned().collect();
+            layout.link_group_order = link_groups
+                .iter()
+                .filter(|g| present.contains(*g))
+                .cloned()
+                .collect();
+        }
 
         // Install link annotations based on mode
         match self.mode {
             AlignmentLayoutMode::Group => {
-                // GROUP mode: annotations use null/grayscale colors
-                DefaultEdgeLayout::install_link_annotations(&mut layout, &link_groups, None);
+                // GROUP mode: suppress link annotation colors (Java returns null)
+                let empty_colors: HashMap<String, String> = link_groups
+                    .iter()
+                    .map(|g| (g.clone(), "".to_string()))
+                    .collect();
+                DefaultEdgeLayout::install_link_annotations(
+                    &mut layout,
+                    &link_groups,
+                    Some(&empty_colors),
+                );
+                layout.link_group_annots = "false".to_string();
             }
             AlignmentLayoutMode::Cycle => {
                 // CYCLE mode: use cycle-specific link annotations if available

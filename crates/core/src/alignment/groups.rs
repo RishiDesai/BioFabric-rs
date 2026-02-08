@@ -19,6 +19,129 @@ use crate::model::NodeId;
 use crate::worker::ProgressMonitor;
 use std::collections::{BTreeSet, HashMap};
 
+// Java ordering + color map (NodeGroupMap.nodeGroupAnnots / nodeGroupAnnotsPerfectNG)
+const NODE_GROUP_ANNOTS: &[(&str, &str)] = &[
+    ("(P:0)", "GrayBlue"),
+    ("(P:P)", "Orange"),
+    ("(P:pBp)", "Yellow"),
+    ("(P:pBb)", "DarkPeach"),
+    ("(P:pBp/pBb)", "DarkPowderBlue"),
+    ("(P:pRp)", "Green"),
+    ("(P:P/pBp)", "Purple"),
+    ("(P:P/pBb)", "DarkOrange"),
+    ("(P:P/pBp/pBb)", "DarkYellow"),
+    ("(P:P/pRp)", "Pink"),
+    ("(P:pBp/pRp)", "PowderBlue"),
+    ("(P:pBb/pRp)", "DarkGreen"),
+    ("(P:pBp/pBb/pRp)", "DarkPurple"),
+    ("(P:P/pBp/pRp)", "Peach"),
+    ("(P:P/pBb/pRp)", "DarkGrayBlue"),
+    ("(P:P/pBp/pBb/pRp)", "DarkPink"),
+    ("(P:pRr)", "GrayBlue"),
+    ("(P:P/pRr)", "Orange"),
+    ("(P:pBp/pRr)", "Yellow"),
+    ("(P:pBb/pRr)", "DarkPowderBlue"),
+    ("(P:pBp/pBb/pRr)", "DarkPeach"),
+    ("(P:pRp/pRr)", "Green"),
+    ("(P:P/pBp/pRr)", "Purple"),
+    ("(P:P/pBb/pRr)", "DarkGrayBlue"),
+    ("(P:P/pBp/pBb/pRr)", "DarkOrange"),
+    ("(P:P/pRp/pRr)", "Pink"),
+    ("(P:pBp/pRp/pRr)", "PowderBlue"),
+    ("(P:pBb/pRp/pRr)", "DarkYellow"),
+    ("(P:pBp/pBb/pRp/pRr)", "DarkPurple"),
+    ("(P:P/pBp/pRp/pRr)", "Peach"),
+    ("(P:P/pBb/pRp/pRr)", "DarkPink"),
+    ("(P:P/pBp/pBb/pRp/pRr)", "DarkGreen"),
+    ("(B:pBb)", "PowderBlue"),
+    ("(B:bBb)", "Purple"),
+    ("(B:pBb/bBb)", "Pink"),
+    ("(B:0)", "Peach"),
+    ("(R:pRr)", "GrayBlue"),
+    ("(R:rRr)", "Orange"),
+    ("(R:pRr/rRr)", "Yellow"),
+    ("(R:0)", "Green"),
+];
+
+const NODE_GROUP_ANNOTS_PERFECT: &[(&str, &str)] = &[
+    ("(P:0/1)", "GrayBlue"),
+    ("(P:0/0)", "DarkGrayBlue"),
+    ("(P:P/1)", "Orange"),
+    ("(P:P/0)", "DarkOrange"),
+    ("(P:pBp/1)", "Yellow"),
+    ("(P:pBp/0)", "DarkYellow"),
+    ("(P:pBb/1)", "DarkPeach"),
+    ("(P:pBb/0)", "Peach"),
+    ("(P:pBp/pBb/1)", "DarkPowderBlue"),
+    ("(P:pBp/pBb/0)", "PowderBlue"),
+    ("(P:pRp/1)", "Green"),
+    ("(P:pRp/0)", "DarkGreen"),
+    ("(P:P/pBp/1)", "Purple"),
+    ("(P:P/pBp/0)", "DarkPurple"),
+    ("(P:P/pBb/1)", "DarkOrange"),
+    ("(P:P/pBb/0)", "Orange"),
+    ("(P:P/pBp/pBb/1)", "DarkYellow"),
+    ("(P:P/pBp/pBb/0)", "Yellow"),
+    ("(P:P/pRp/1)", "Pink"),
+    ("(P:P/pRp/0)", "DarkPink"),
+    ("(P:pBp/pRp/1)", "PowderBlue"),
+    ("(P:pBp/pRp/0)", "DarkPowderBlue"),
+    ("(P:pBb/pRp/1)", "DarkGreen"),
+    ("(P:pBb/pRp/0)", "Green"),
+    ("(P:pBp/pBb/pRp/1)", "DarkPurple"),
+    ("(P:pBp/pBb/pRp/0)", "Purple"),
+    ("(P:P/pBp/pRp/1)", "Peach"),
+    ("(P:P/pBp/pRp/0)", "DarkPeach"),
+    ("(P:P/pBb/pRp/1)", "DarkGrayBlue"),
+    ("(P:P/pBb/pRp/0)", "GrayBlue"),
+    ("(P:P/pBp/pBb/pRp/1)", "DarkPink"),
+    ("(P:P/pBp/pBb/pRp/0)", "Pink"),
+    ("(P:pRr/1)", "GrayBlue"),
+    ("(P:pRr/0)", "DarkGrayBlue"),
+    ("(P:P/pRr/1)", "Orange"),
+    ("(P:P/pRr/0)", "DarkOrange"),
+    ("(P:pBp/pRr/1)", "Yellow"),
+    ("(P:pBp/pRr/0)", "DarkYellow"),
+    ("(P:pBb/pRr/1)", "DarkPowderBlue"),
+    ("(P:pBb/pRr/0)", "PowderBlue"),
+    ("(P:pBp/pBb/pRr/1)", "DarkPeach"),
+    ("(P:pBp/pBb/pRr/0)", "Peach"),
+    ("(P:pRp/pRr/1)", "Green"),
+    ("(P:pRp/pRr/0)", "DarkGreen"),
+    ("(P:P/pBp/pRr/1)", "Purple"),
+    ("(P:P/pBp/pRr/0)", "DarkPurple"),
+    ("(P:P/pBb/pRr/1)", "DarkGrayBlue"),
+    ("(P:P/pBb/pRr/0)", "GrayBlue"),
+    ("(P:P/pBp/pBb/pRr/1)", "DarkOrange"),
+    ("(P:P/pBp/pBb/pRr/0)", "Orange"),
+    ("(P:P/pRp/pRr/1)", "Pink"),
+    ("(P:P/pRp/pRr/0)", "DarkPink"),
+    ("(P:pBp/pRp/pRr/1)", "PowderBlue"),
+    ("(P:pBp/pRp/pRr/0)", "DarkPowderBlue"),
+    ("(P:pBb/pRp/pRr/1)", "DarkYellow"),
+    ("(P:pBb/pRp/pRr/0)", "Yellow"),
+    ("(P:pBp/pBb/pRp/pRr/1)", "DarkPurple"),
+    ("(P:pBp/pBb/pRp/pRr/0)", "Purple"),
+    ("(P:P/pBp/pRp/pRr/1)", "Peach"),
+    ("(P:P/pBp/pRp/pRr/0)", "DarkPeach"),
+    ("(P:P/pBb/pRp/pRr/1)", "DarkPink"),
+    ("(P:P/pBb/pRp/pRr/0)", "Pink"),
+    ("(P:P/pBp/pBb/pRp/pRr/1)", "DarkGreen"),
+    ("(P:P/pBp/pBb/pRp/pRr/0)", "Green"),
+    ("(B:pBb/1)", "PowderBlue"),
+    ("(B:pBb/0)", "DarkPowderBlue"),
+    ("(B:bBb/1)", "Purple"),
+    ("(B:bBb/0)", "DarkPurple"),
+    ("(B:pBb/bBb/1)", "Pink"),
+    ("(B:pBb/bBb/0)", "DarkPink"),
+    ("(B:0/1)", "Peach"),
+    ("(B:0/0)", "DarkPeach"),
+    ("(R:pRr/0)", "GrayBlue"),
+    ("(R:rRr/0)", "Orange"),
+    ("(R:pRr/rRr/0)", "Yellow"),
+    ("(R:0/0)", "Green"),
+];
+
 /// How to subdivide node groups when a perfect alignment is available.
 ///
 /// Without a perfect alignment, there are ~40 base node groups. With a
@@ -50,8 +173,8 @@ pub const DEFAULT_JACCARD_THRESHOLD: f64 = 0.75;
 
 /// Tag identifying a node group.
 ///
-/// Format: `"(color:edge_type1/edge_type2/...)"`, where color is `P`, `b`,
-/// or `r` and edge types are in canonical order.
+/// Format: `"(color:edge_type1/edge_type2/...)"`, where color is `P`, `B`,
+/// or `R` and edge types are in canonical order.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeGroupTag(pub String);
 
@@ -60,8 +183,8 @@ impl NodeGroupTag {
     pub fn from_parts(color: NodeColor, edge_types: &[EdgeType]) -> Self {
         let color_char = match color {
             NodeColor::Purple => "P",
-            NodeColor::Blue => "b",
-            NodeColor::Red => "r",
+            NodeColor::Blue => "B",
+            NodeColor::Red => "R",
         };
         if edge_types.is_empty() {
             return Self(format!("({}:0)", color_char));
@@ -79,11 +202,11 @@ impl PartialOrd for NodeGroupTag {
 
 impl Ord for NodeGroupTag {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Parse color priority: P=0, b=1, r=2 (matching Java's Purple < Blue < Red)
+        // Parse color priority: P=0, B=1, R=2 (matching Java's Purple < Blue < Red)
         fn color_priority(tag: &str) -> u8 {
             if tag.starts_with("(P:") {
                 0
-            } else if tag.starts_with("(b:") {
+            } else if tag.starts_with("(B:") {
                 1
             } else {
                 2
@@ -107,6 +230,8 @@ pub struct NodeGroup {
     pub edge_types: Vec<EdgeType>,
     /// Member node IDs.
     pub members: Vec<NodeId>,
+    /// Annotation color name (Java group color map).
+    pub annot_color: String,
 }
 
 /// Complete node group classification for a merged network.
@@ -127,6 +252,23 @@ pub struct NodeGroupMap {
 impl NodeGroupMap {
     /// Build the node group map from a merged network.
     pub fn from_merged(merged: &MergedNetwork, _monitor: &dyn ProgressMonitor) -> Self {
+        Self::from_merged_with_mode(
+            merged,
+            PerfectNGMode::None,
+            None,
+            DEFAULT_JACCARD_THRESHOLD,
+            _monitor,
+        )
+    }
+
+    /// Build the node group map from a merged network with a PerfectNG mode.
+    pub fn from_merged_with_mode(
+        merged: &MergedNetwork,
+        mode: PerfectNGMode,
+        jaccard_correct: Option<&HashMap<NodeId, bool>>,
+        jaccard_threshold: f64,
+        _monitor: &dyn ProgressMonitor,
+    ) -> Self {
         // Build adjacency: for each node, collect incident edge types
         let mut node_edge_types: HashMap<NodeId, BTreeSet<usize>> = HashMap::new();
 
@@ -153,7 +295,7 @@ impl NodeGroupMap {
                 .insert(et_idx);
         }
 
-        // Group nodes by (color, edge_type_set) -> tag
+        // Group nodes by (color, edge_type_set, correctness) -> tag
         let mut tag_to_nodes: HashMap<NodeGroupTag, Vec<NodeId>> = HashMap::new();
         let mut tag_to_meta: HashMap<NodeGroupTag, (NodeColor, Vec<EdgeType>)> = HashMap::new();
 
@@ -164,7 +306,29 @@ impl NodeGroupMap {
                 .map(|&idx| EdgeType::all()[idx])
                 .collect();
 
-            let tag = NodeGroupTag::from_parts(color, &edge_types_sorted);
+            let mut tag_str = NodeGroupTag::from_parts(color, &edge_types_sorted).0;
+
+            if mode != PerfectNGMode::None {
+                let is_correct = match mode {
+                    PerfectNGMode::NodeCorrectness => merged
+                        .merged_to_correct
+                        .as_ref()
+                        .and_then(|m| m.get(node_id))
+                        .copied()
+                        .unwrap_or(false),
+                    PerfectNGMode::JaccardSimilarity => jaccard_correct
+                        .and_then(|m| m.get(node_id))
+                        .copied()
+                        .unwrap_or(false),
+                    PerfectNGMode::None => false,
+                };
+                if let Some(pos) = tag_str.rfind(')') {
+                    let suffix = if is_correct { "/1" } else { "/0" };
+                    tag_str.insert_str(pos, suffix);
+                }
+            }
+
+            let tag = NodeGroupTag(tag_str);
 
             tag_to_nodes
                 .entry(tag.clone())
@@ -175,18 +339,30 @@ impl NodeGroupMap {
                 .or_insert((color, edge_types_sorted));
         }
 
-        // Sort groups canonically
-        let mut sorted_tags: Vec<NodeGroupTag> = tag_to_nodes.keys().cloned().collect();
-        sorted_tags.sort();
+        let order_list: &[(&str, &str)] = if mode == PerfectNGMode::None {
+            NODE_GROUP_ANNOTS
+        } else {
+            NODE_GROUP_ANNOTS_PERFECT
+        };
 
-        // Build groups
+        // Build groups in Java's canonical order (including empty groups)
         let mut groups = Vec::new();
         let mut node_to_group = HashMap::new();
 
-        for (group_idx, tag) in sorted_tags.iter().enumerate() {
-            let (color, edge_types) = tag_to_meta.get(tag).cloned().unwrap();
-            let mut members = tag_to_nodes.remove(tag).unwrap_or_default();
-            // Sort members alphabetically within each group
+        for (group_idx, (tag_str, color_name)) in order_list.iter().enumerate() {
+            let tag = NodeGroupTag((*tag_str).to_string());
+            let (color, edge_types) = tag_to_meta.get(&tag).cloned().unwrap_or_else(|| {
+                let inferred = if tag_str.starts_with("(P:") {
+                    NodeColor::Purple
+                } else if tag_str.starts_with("(B:") {
+                    NodeColor::Blue
+                } else {
+                    NodeColor::Red
+                };
+                (inferred, Vec::new())
+            });
+
+            let mut members = tag_to_nodes.remove(&tag).unwrap_or_default();
             members.sort();
 
             for node_id in &members {
@@ -194,19 +370,48 @@ impl NodeGroupMap {
             }
 
             groups.push(NodeGroup {
-                tag: tag.clone(),
+                tag,
                 color,
                 edge_types,
                 members,
+                annot_color: (*color_name).to_string(),
             });
+        }
+
+        // Append any unexpected groups at the end to avoid dropping nodes
+        if !tag_to_nodes.is_empty() {
+            for (tag, mut members) in tag_to_nodes {
+                members.sort();
+                let group_idx = groups.len();
+                for node_id in &members {
+                    node_to_group.insert(node_id.clone(), group_idx);
+                }
+                groups.push(NodeGroup {
+                    tag,
+                    color: NodeColor::Purple,
+                    edge_types: Vec::new(),
+                    members,
+                    annot_color: "GrayBlue".to_string(),
+                });
+            }
         }
 
         NodeGroupMap {
             groups,
             node_to_group,
-            perfect_mode: PerfectNGMode::None,
-            jaccard_threshold: DEFAULT_JACCARD_THRESHOLD,
+            perfect_mode: mode,
+            jaccard_threshold,
         }
+    }
+
+    /// Total number of groups (including empty).
+    pub fn group_count(&self) -> usize {
+        self.groups.len()
+    }
+
+    /// Group index for a node.
+    pub fn group_index(&self, node_id: &NodeId) -> Option<usize> {
+        self.node_to_group.get(node_id).copied()
     }
 
     /// Compute the group ratio vector (fraction of nodes in each group).

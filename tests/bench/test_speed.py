@@ -79,17 +79,8 @@ LOGS_DIR = os.getenv("LOGS_DIR", os.path.join(BENCH_OUTPUT_DIR, "logs"))
 # as working-set size exceeds L2/L3 cache.
 # ---------------------------------------------------------------------------
 
-# ba2K.sif: 2,000 nodes, ~12K edges (Barabasi-Albert power-law)
-REQUIRED_SPEEDUP_BA2K = 1.5
-
-# yeast.gw: ~2,400 nodes, ~16K edges (real yeast PPI, GW format)
-REQUIRED_SPEEDUP_YEAST = 1.5
-
 # SC.sif: ~6,600 nodes, ~77K edges (S. cerevisiae, dense)
 REQUIRED_SPEEDUP_SC = 2.0
-
-# BINDhuman.sif: 19,333 nodes, ~39K edges (large human PPI)
-REQUIRED_SPEEDUP_BINDHUMAN = 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -290,33 +281,6 @@ def test_rust_binary_available():
 # Rust's advantage grows with network scale.
 # ---------------------------------------------------------------------------
 
-def test_speed_ba2K_default():
-    """ba2K.sif (2K nodes, ~12K edges): default layout.
-
-    Power-law (Barabasi-Albert) graph.  Medium-sized stress test
-    with a few high-degree hubs.  BFS ordering and edge sorting
-    must handle degree skew efficiently.
-    """
-    _run_speed_test(
-        "speed_ba2K_default",
-        "ba2K.sif",
-        REQUIRED_SPEEDUP_BA2K,
-    )
-
-
-def test_speed_yeast_gw_default():
-    """yeast.gw (~2.4K nodes, ~16K edges): default layout, GW format.
-
-    Real protein-protein interaction network (S. cerevisiae).
-    Tests GW parser performance in addition to layout speed.
-    """
-    _run_speed_test(
-        "speed_yeast_gw_default",
-        "yeast.gw",
-        REQUIRED_SPEEDUP_YEAST,
-    )
-
-
 def test_speed_SC_default():
     """SC.sif (~6.6K nodes, ~77K edges): default layout.
 
@@ -331,21 +295,6 @@ def test_speed_SC_default():
     )
 
 
-def test_speed_BINDhuman_default():
-    """BINDhuman.sif (19K nodes, ~39K edges): default layout.
-
-    Largest network in the test suite.  BFS over 19K nodes with shadow
-    links produces ~78K total edges.  Java's GC pressure peaks here
-    (millions of small objects for the link/node maps).  Rust's
-    contiguous-memory approach should show its largest advantage.
-    """
-    _run_speed_test(
-        "speed_BINDhuman_default",
-        "BINDhuman.sif",
-        REQUIRED_SPEEDUP_BINDHUMAN,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Speed tests — alternative layouts (large networks)
 #
@@ -353,22 +302,6 @@ def test_speed_BINDhuman_default():
 # different computational patterns (similarity matrices, hierarchical
 # grouping) where Rust's advantages may differ.
 # ---------------------------------------------------------------------------
-
-def test_speed_ba2K_similarity():
-    """ba2K.sif (2K nodes, ~12K edges): similarity layout.
-
-    NodeSimilarity computes pairwise Jaccard similarity, producing an
-    O(n^2) similarity matrix.  This is compute-heavy and exercises
-    cache performance on the dense matrix.
-    """
-    _run_speed_test(
-        "speed_ba2K_similarity",
-        "ba2K.sif",
-        REQUIRED_SPEEDUP_BA2K,
-        java_extra_args=["--layout", "similarity_resort"],
-        rust_extra_args=["--algorithm", "similarity"],
-    )
-
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -11,7 +11,7 @@
 #
 # Usage:
 #   ./tests/bench/run_bench.sh                    # run all speed tests
-#   ./tests/bench/run_bench.sh -k BINDhuman       # run one test
+#   ./tests/bench/run_bench.sh -k SC              # run one test
 #   ./tests/bench/run_bench.sh --trials 3          # fewer trials (faster)
 #   ./tests/bench/run_bench.sh --container         # skip Docker/compile steps
 #   ./tests/bench/run_bench.sh --dry-run           # print config, don't run

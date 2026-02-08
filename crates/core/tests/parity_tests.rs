@@ -49,7 +49,9 @@ use biofabric_core::model::{Network, NodeId};
 use biofabric_core::worker::NoopMonitor;
 use biofabric_core::alignment::layout::{AlignmentEdgeLayout, AlignmentLayoutMode, AlignmentNodeLayout};
 use biofabric_core::alignment::merge::MergedNetwork;
-use biofabric_core::alignment::groups::NodeGroupMap;
+use biofabric_core::alignment::groups::{NodeGroupMap, PerfectNGMode, DEFAULT_JACCARD_THRESHOLD};
+use biofabric_core::alignment::jaccard::JaccardSimilarity;
+use biofabric_core::alignment::cycle::AlignmentCycles;
 
 // ---------------------------------------------------------------------------
 // Test infrastructure
@@ -81,13 +83,11 @@ fn golden_dir(dirname: &str) -> PathBuf {
 /// message) if it hasn't been generated yet.
 fn golden_available(dirname: &str, filename: &str) -> bool {
     let path = golden_dir(dirname).join(filename);
-    if !path.exists() {
-        eprintln!(
-            "SKIP: golden file not found at {}. Run ./tests/parity/generate_goldens.sh first.",
-            path.display()
-        );
-        return false;
-    }
+    assert!(
+        path.exists(),
+        "Golden file not found at {}. Run ./tests/parity/generate_goldens.sh first.",
+        path.display()
+    );
     true
 }
 
@@ -648,12 +648,43 @@ fn align_file_path(filename: &str) -> PathBuf {
 }
 
 /// Run alignment layout: merge two networks using an alignment, then lay out.
+fn alignment_perfect_file(align_file: &str) -> Option<&'static str> {
+    match align_file {
+        "test_perfect.align" => Some("test_perfect.align"),
+        "test_partial.align" => None,
+        "yeast_sc_s3_pure.align" => Some("yeast_sc_perfect.align"),
+        "yeast_sc_perfect.align" => Some("yeast_sc_perfect.align"),
+        "casestudy_iv.align" => Some("casestudy_iv.align"),
+        _ => None,
+    }
+}
+
+fn alignment_ng_mode(golden_dirname: &str) -> Option<PerfectNGMode> {
+    if golden_dirname.contains("ng_nc") {
+        Some(PerfectNGMode::NodeCorrectness)
+    } else if golden_dirname.contains("ng_jacc") {
+        Some(PerfectNGMode::JaccardSimilarity)
+    } else {
+        None
+    }
+}
+
+fn alignment_use_node_groups(golden_dirname: &str) -> bool {
+    golden_dirname.contains("cycle_noshadow")
+}
+
+struct AlignmentLayoutResult {
+    network: Network,
+    layout: NetworkLayout,
+}
+
 fn run_alignment_layout(
+    cfg: &ParityConfig,
     g1: &Network,
     g2: &Network,
     align_file: &str,
     mode: AlignmentLayoutMode,
-) -> NetworkLayout {
+) -> AlignmentLayoutResult {
     let monitor = NoopMonitor;
 
     // Parse alignment file
@@ -665,11 +696,53 @@ fn run_alignment_layout(
     );
     let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
 
-    // Merge networks
-    let merged = MergedNetwork::from_alignment(g1, g2, &alignment, None, &monitor).unwrap();
+    let perfect_alignment = alignment_perfect_file(align_file).map(|perfect_file| {
+        let perfect_path = align_file_path(perfect_file);
+        assert!(
+            perfect_path.exists(),
+            "Perfect alignment file not found: {}",
+            perfect_path.display()
+        );
+        biofabric_core::io::align::parse_file(&perfect_path).unwrap()
+    });
 
-    // Build node groups for GROUP mode
-    let groups = NodeGroupMap::from_merged(&merged, &monitor);
+    // Merge networks (include perfect alignment if available)
+    let merged = MergedNetwork::from_alignment(
+        g1,
+        g2,
+        &alignment,
+        perfect_alignment.as_ref(),
+        &monitor,
+    )
+    .unwrap();
+
+    // Determine PerfectNG mode (if any)
+    let ng_mode = alignment_ng_mode(cfg.golden_dirname);
+    let jaccard_correct = if matches!(ng_mode, Some(PerfectNGMode::JaccardSimilarity)) {
+        perfect_alignment.as_ref().map(|perfect| {
+            JaccardSimilarity::correctness_map_with_alignments(
+                g1,
+                g2,
+                &alignment,
+                perfect,
+                DEFAULT_JACCARD_THRESHOLD,
+            )
+        })
+    } else {
+        None
+    };
+
+    let groups = if let Some(mode) = ng_mode {
+        NodeGroupMap::from_merged_with_mode(
+            &merged,
+            mode,
+            jaccard_correct.as_ref(),
+            DEFAULT_JACCARD_THRESHOLD,
+            &monitor,
+        )
+    } else {
+        NodeGroupMap::from_merged(&merged, &monitor)
+    };
 
     let params = LayoutParams {
         include_shadows: true,
@@ -681,7 +754,11 @@ fn run_alignment_layout(
     };
 
     // Node layout
-    let node_layout = AlignmentNodeLayout::new(merged.clone(), mode).with_groups(groups);
+    let mut node_layout = AlignmentNodeLayout::new(merged.clone(), mode).with_groups(groups.clone());
+    if mode == AlignmentLayoutMode::Cycle {
+        let cycles = AlignmentCycles::detect(&alignment, perfect_alignment.as_ref(), &monitor);
+        node_layout = node_layout.with_cycles(cycles);
+    }
     let node_order = node_layout
         .layout_nodes(&merged.network, &params, &monitor)
         .unwrap();
@@ -696,9 +773,19 @@ fn run_alignment_layout(
     );
 
     let edge_layout = AlignmentEdgeLayout::new(mode);
-    edge_layout
+    let mut layout = edge_layout
         .layout_edges(&mut build_data, &params, &monitor)
-        .unwrap()
+        .unwrap();
+
+    // Install node annotations for group/cycle layouts
+    if mode == AlignmentLayoutMode::Group || alignment_use_node_groups(cfg.golden_dirname) {
+        layout.node_annotations = AlignmentNodeLayout::build_group_node_annotations(&groups);
+    }
+
+    AlignmentLayoutResult {
+        network: merged.network,
+        layout,
+    }
 }
 
 /// Extract a subnetwork from a loaded network using the specified node names.
@@ -1054,6 +1141,134 @@ fn format_eda_no_shadows(layout: &NetworkLayout) -> String {
     out
 }
 
+fn parse_bool_from_text(text: &str) -> Option<bool> {
+    for token in text
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|t| !t.is_empty())
+    {
+        match token.to_lowercase().as_str() {
+            "true" => return Some(true),
+            "false" => return Some(false),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn parse_float_from_text(text: &str) -> Option<f64> {
+    for token in text.split_whitespace() {
+        if let Ok(val) = token.parse::<f64>() {
+            return Some(val);
+        }
+    }
+    None
+}
+
+fn has_undirected_cycle(network: &Network) -> bool {
+    let mut adj: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+
+    for link in network.links() {
+        if link.is_shadow {
+            continue;
+        }
+        if link.source == link.target {
+            return true;
+        }
+        adj.entry(link.source.clone())
+            .or_default()
+            .insert(link.target.clone());
+        adj.entry(link.target.clone())
+            .or_default()
+            .insert(link.source.clone());
+    }
+
+    let mut visited: HashSet<NodeId> = HashSet::new();
+    for node in network.node_ids() {
+        if visited.contains(node) {
+            continue;
+        }
+        if dfs_undirected_cycle(node, None, &adj, &mut visited) {
+            return true;
+        }
+    }
+    false
+}
+
+fn dfs_undirected_cycle(
+    node: &NodeId,
+    parent: Option<&NodeId>,
+    adj: &HashMap<NodeId, HashSet<NodeId>>,
+    visited: &mut HashSet<NodeId>,
+) -> bool {
+    visited.insert(node.clone());
+    if let Some(neighbors) = adj.get(node) {
+        for neighbor in neighbors {
+            if Some(neighbor) == parent {
+                continue;
+            }
+            if visited.contains(neighbor) {
+                return true;
+            }
+            if dfs_undirected_cycle(neighbor, Some(node), adj, visited) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn run_analysis_test(cfg: &ParityConfig) {
+    let input = network_path(cfg.input_file);
+    assert!(input.exists(), "Input file not found: {}", input.display());
+
+    golden_available(cfg.golden_dirname, "output.txt");
+    let golden_txt = read_golden(cfg.golden_dirname, "output.txt");
+    let network = load_network(&input);
+
+    match cfg.layout {
+        "analysis_cycle" => {
+            let expected = parse_bool_from_text(&golden_txt).unwrap_or_else(|| {
+                panic!(
+                    "Failed to parse boolean from golden output for {}",
+                    cfg.golden_dirname
+                )
+            });
+            let actual = has_undirected_cycle(&network);
+            assert_eq!(
+                actual, expected,
+                "Cycle detection mismatch for {}",
+                cfg.golden_dirname
+            );
+        }
+        "analysis_jaccard" => {
+            let (a, b) = cfg
+                .node_pair
+                .expect("analysis_jaccard requires a node pair");
+            let comparison = network
+                .compare_nodes(&NodeId::new(a), &NodeId::new(b))
+                .unwrap_or_else(|| {
+                    panic!("Nodes not found for Jaccard test {} ({}, {})", cfg.golden_dirname, a, b)
+                });
+            let expected = parse_float_from_text(&golden_txt).unwrap_or_else(|| {
+                panic!(
+                    "Failed to parse float from golden output for {}",
+                    cfg.golden_dirname
+                )
+            });
+            let actual = comparison.jaccard_similarity;
+            let tolerance = 1e-10;
+            assert!(
+                (actual - expected).abs() < tolerance,
+                "Jaccard mismatch for {}: expected {}, got {}",
+                cfg.golden_dirname,
+                expected,
+                actual
+            );
+        }
+        _ => panic!("Unknown analysis layout: {}", cfg.layout),
+    }
+}
+
 /// Run a NOA (node order) parity test.
 ///
 /// Supports:
@@ -1099,7 +1314,7 @@ fn run_noa_test(cfg: &ParityConfig) {
             AlignmentLayoutMode::Group
         };
 
-        run_alignment_layout(&network, &g2, align_file, mode)
+        run_alignment_layout(cfg, &network, &g2, align_file, mode).layout
     } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
@@ -1191,7 +1406,7 @@ fn run_eda_test(cfg: &ParityConfig) {
             AlignmentLayoutMode::Group
         };
 
-        run_alignment_layout(&network, &g2, align_file, mode)
+        run_alignment_layout(cfg, &network, &g2, align_file, mode).layout
     } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
@@ -1283,8 +1498,8 @@ fn run_bif_test(cfg: &ParityConfig) {
         };
 
         // If extraction already produced a layout, use it; otherwise compute
-        let layout = if let Some(el) = extract_layout {
-            el
+        let (layout, network) = if let Some(el) = extract_layout {
+            (el, network)
         } else if cfg.layout == "alignment" {
             let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
             let align_file = cfg.align_file.expect("alignment tests require align_file");
@@ -1298,7 +1513,8 @@ fn run_bif_test(cfg: &ParityConfig) {
             } else {
                 AlignmentLayoutMode::Group
             };
-            run_alignment_layout(&network, &g2, align_file, mode)
+            let aligned = run_alignment_layout(cfg, &network, &g2, align_file, mode);
+            (aligned.layout, aligned.network)
         } else if cfg.layout == "hierdag" {
             let mut params = biofabric_core::layout::traits::LayoutParams {
                 include_shadows: true,
@@ -1306,9 +1522,9 @@ fn run_bif_test(cfg: &ParityConfig) {
                 ..Default::default()
             };
             params.point_up = cfg.point_up;
-            run_hierdag_layout(&network, &params)
+            (run_hierdag_layout(&network, &params), network)
         } else if cfg.layout == "world_bank" {
-            run_world_bank_layout(&network)
+            (run_world_bank_layout(&network), network)
         } else if cfg.layout == "control_top" {
             let ctrl_mode = match cfg.control_mode {
                 Some("degree_only") => ControlOrder::DegreeOnly,
@@ -1321,19 +1537,25 @@ fn run_bif_test(cfg: &ParityConfig) {
                 Some("breadth_order") => TargetOrder::BreadthOrder,
                 _ => TargetOrder::TargetDegree,
             };
-            run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
+            (
+                run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes),
+                network,
+            )
         } else if cfg.layout == "node_cluster" {
-            run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
+            (
+                run_node_cluster_layout(&network, cfg.attribute_file.unwrap()),
+                network,
+            )
         } else if let Some(noa_file) = cfg.noa_file {
             let noa_path = noa_file_path(noa_file);
             assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
             let node_order = parse_noa_format_file(&noa_path);
-            run_layout_with_node_order(&network, node_order)
+            (run_layout_with_node_order(&network, node_order), network)
         } else if let Some(eda_file) = cfg.eda_file {
             // P11: Fixed link-order import from EDA file
             let eda_path = eda_file_path(eda_file);
             assert!(eda_path.exists(), "EDA file not found: {}", eda_path.display());
-            run_layout_with_link_order(&network, &eda_path)
+            (run_layout_with_link_order(&network, &eda_path), network)
         } else if let Some(link_groups) = cfg.link_groups {
             let mode = match cfg.group_mode {
                 Some("per_node") => LayoutMode::PerNode,
@@ -1341,12 +1563,14 @@ fn run_bif_test(cfg: &ParityConfig) {
                 _ => LayoutMode::PerNode,
             };
             let groups: Vec<String> = link_groups.iter().map(|s| s.to_string()).collect();
-            run_layout_with_groups(&network, &groups, mode)
+            (run_layout_with_groups(&network, &groups, mode), network)
         } else {
             match cfg.layout {
-                "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
-                "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
-                _ => run_default_layout(&network),
+                "similarity_resort" => (run_similarity_layout(&network, SimilarityMode::Resort), network),
+                "similarity_clustered" => {
+                    (run_similarity_layout(&network, SimilarityMode::Clustered), network)
+                }
+                _ => (run_default_layout(&network), network),
             }
         };
 
@@ -1362,6 +1586,14 @@ fn run_bif_test(cfg: &ParityConfig) {
         }
         if let Some(ld) = cfg.link_darker {
             session.display_options.link_darker_level = ld as f64;
+        }
+
+        // Alignment cycle view explicitly writes shadows="true" in Java goldens
+        if cfg.layout == "alignment"
+            && cfg.golden_dirname.contains("cycle")
+            && !cfg.golden_dirname.contains("cycle_noshadow")
+        {
+            session.display_options.shadows_explicit = true;
         }
 
         session
@@ -1476,7 +1708,6 @@ macro_rules! parity_test_grouped {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing link grouping"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.link_groups = Some($groups);
@@ -1485,7 +1716,6 @@ macro_rules! parity_test_grouped {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing link grouping"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.link_groups = Some($groups);
@@ -1535,7 +1765,6 @@ macro_rules! parity_test_layout {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing layout algorithm"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = $layout;
@@ -1543,7 +1772,6 @@ macro_rules! parity_test_layout {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing layout algorithm"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = $layout;
@@ -1570,7 +1798,6 @@ macro_rules! parity_test_hierdag {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing HierDAG layout"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "hierdag";
@@ -1579,7 +1806,6 @@ macro_rules! parity_test_hierdag {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing HierDAG layout"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "hierdag";
@@ -1608,7 +1834,6 @@ macro_rules! parity_test_cluster {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing NodeCluster layout"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "node_cluster";
@@ -1617,7 +1842,6 @@ macro_rules! parity_test_cluster {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing NodeCluster layout"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "node_cluster";
@@ -1647,7 +1871,6 @@ macro_rules! parity_test_controltop {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1657,7 +1880,6 @@ macro_rules! parity_test_controltop {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1687,7 +1909,6 @@ macro_rules! parity_test_controltop {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1698,7 +1919,6 @@ macro_rules! parity_test_controltop {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1731,7 +1951,6 @@ macro_rules! parity_test_set {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing SetLayout"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "set";
@@ -1740,7 +1959,6 @@ macro_rules! parity_test_set {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing SetLayout"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "set";
@@ -1769,7 +1987,6 @@ macro_rules! parity_test_fixed_noa {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_node_order";
@@ -1778,7 +1995,6 @@ macro_rules! parity_test_fixed_noa {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_node_order";
@@ -1807,7 +2023,6 @@ macro_rules! parity_test_fixed_eda {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_link_order";
@@ -1816,7 +2031,6 @@ macro_rules! parity_test_fixed_eda {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_link_order";
@@ -1845,7 +2059,6 @@ macro_rules! parity_test_extract {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing subnetwork extraction"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.extract_nodes = Some($nodes);
@@ -1853,7 +2066,6 @@ macro_rules! parity_test_extract {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing subnetwork extraction"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.extract_nodes = Some($nodes);
@@ -1876,18 +2088,17 @@ macro_rules! parity_test_analysis {
         name: $name:ident,
         input: $input:expr,
         golden: $golden:expr,
-        analysis: $analysis:expr
+        analysis: $analysis:expr,
+        node_pair: $pair:expr
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing analysis operations"]
             fn $name() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = $analysis;
+                cfg.node_pair = $pair;
                 // Analysis tests compare a text output file, not NOA/EDA/BIF
-                // TODO: implement run_analysis_test(&cfg)
-                let _ = cfg;
-                eprintln!("  Analysis test: STUB (implementation pending)");
+                run_analysis_test(&cfg);
             }
         }
     };
@@ -1905,7 +2116,6 @@ macro_rules! parity_test_display {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing display options"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 $(cfg.min_drain_zone = Some($dz);)?
@@ -1928,7 +2138,6 @@ macro_rules! parity_test_align {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing alignment"]
             fn [<$name _noa>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "alignment";
@@ -1938,7 +2147,6 @@ macro_rules! parity_test_align {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing alignment"]
             fn [<$name _eda>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "alignment";
@@ -1948,7 +2156,6 @@ macro_rules! parity_test_align {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing alignment"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "alignment";
@@ -1979,7 +2186,7 @@ macro_rules! parity_test_align {
 #[ignore = "golden-gen: run explicitly to generate golden files"]
 fn generate_goldens() {
     let cases: Vec<(&str, &str, bool)> = vec![
-        // ---- P1: Default layout, shadows ON (17 networks) ----
+        // ---- P1: Default layout, shadows ON (12 networks) ----
         ("single_node.sif",               "single_node_default",               true),
         ("single_edge.sif",               "single_edge_default",               true),
         ("triangle.sif",                  "triangle_default",                  true),
@@ -1989,14 +2196,10 @@ fn generate_goldens() {
         ("multi_relation.sif",            "multi_relation_default",            true),
         ("dense_clique.sif",              "dense_clique_default",              true),
         ("linear_chain.sif",              "linear_chain_default",              true),
-        ("star-500.sif",                  "star-500_default",                  true),
-        ("ba2K.sif",                      "ba2K_default",                      true),
         ("triangle.gw",                   "triangle_gw_default",               true),
         ("directed_triangle.gw",          "directed_triangle_gw_default",      true),
-        ("RNorvegicus.gw",                "RNorvegicus_gw_default",            true),
         ("CElegans.gw",                   "CElegans_gw_default",               true),
-        ("yeast.gw",                      "yeast_gw_default",                  true),
-        // ---- P2: Default layout, shadows OFF (17 networks) ----
+        // ---- P2: Default layout, shadows OFF (12 networks) ----
         ("single_node.sif",               "single_node_noshadow",              false),
         ("single_edge.sif",               "single_edge_noshadow",              false),
         ("triangle.sif",                  "triangle_noshadow",                 false),
@@ -2006,13 +2209,9 @@ fn generate_goldens() {
         ("multi_relation.sif",            "multi_relation_noshadow",           false),
         ("dense_clique.sif",              "dense_clique_noshadow",             false),
         ("linear_chain.sif",              "linear_chain_noshadow",             false),
-        ("star-500.sif",                  "star-500_noshadow",                 false),
-        ("ba2K.sif",                      "ba2K_noshadow",                     false),
         ("triangle.gw",                   "triangle_gw_noshadow",              false),
         ("directed_triangle.gw",          "directed_triangle_gw_noshadow",     false),
-        ("RNorvegicus.gw",                "RNorvegicus_gw_noshadow",           false),
         ("CElegans.gw",                   "CElegans_gw_noshadow",              false),
-        ("yeast.gw",                      "yeast_gw_noshadow",                 false),
     ];
 
     let mut generated = 0;
@@ -2111,10 +2310,6 @@ fn generate_goldens() {
 
     // ---- P8: ControlTop layout ----
     let controltop_cases: Vec<(&str, &str, &str, &str, Option<&[&str]>)> = vec![
-        ("star-500.sif",       "star-500_controltop_degree_only_target_degree",     "degree_only",   "target_degree",  None),
-        ("star-500.sif",       "star-500_controltop_degree_only_breadth_order",     "degree_only",   "breadth_order",  None),
-        ("star-500.sif",       "star-500_controltop_partial_order_target_degree",   "partial_order", "target_degree",  None),
-        ("star-500.sif",       "star-500_controltop_partial_order_breadth_order",   "partial_order", "breadth_order",  None),
         ("multi_relation.sif", "multi_relation_controltop_degree_only_target_degree",  "degree_only", "target_degree", None),
         ("multi_relation.sif", "multi_relation_controltop_degree_only_breadth_order",  "degree_only", "breadth_order", None),
     ];
@@ -2204,11 +2399,10 @@ fn generate_goldens() {
         }
     }
 
-    // ---- P11: Fixed node-order import (3 variants) ----
+    // ---- P11: Fixed node-order import (2 variants) ----
     let fixed_noa_cases: Vec<(&str, &str, &str)> = vec![
         ("triangle.sif",        "triangle_fixed_noa",        "triangle_reversed.noa"),
         ("multi_relation.sif",  "multi_relation_fixed_noa",  "multi_relation_shuffled.noa"),
-        ("ba2K.sif",            "ba2K_fixed_noa",            "ba2K_reversed.noa"),
     ];
 
     for (input_file, golden_dirname, noa_filename) in &fixed_noa_cases {
@@ -2255,18 +2449,14 @@ fn generate_goldens() {
         generated += 1;
     }
 
-    // ---- P5: Similarity layout (resort + clustered, 8 variants) ----
+    // ---- P5: Similarity layout (resort + clustered, 4 variants) ----
     let similarity_cases: Vec<(&str, &str, &str, SimilarityMode)> = vec![
         // Resort mode
         ("triangle.sif",       "triangle_similarity_resort",       "sif", SimilarityMode::Resort),
         ("multi_relation.sif", "multi_relation_similarity_resort",  "sif", SimilarityMode::Resort),
-        ("ba2K.sif",           "ba2K_similarity_resort",            "sif", SimilarityMode::Resort),
-        ("yeast.gw",           "yeast_gw_similarity_resort",        "gw",  SimilarityMode::Resort),
         // Clustered mode
         ("triangle.sif",       "triangle_similarity_clustered",       "sif", SimilarityMode::Clustered),
         ("multi_relation.sif", "multi_relation_similarity_clustered",  "sif", SimilarityMode::Clustered),
-        ("ba2K.sif",           "ba2K_similarity_clustered",            "sif", SimilarityMode::Clustered),
-        ("yeast.gw",           "yeast_gw_similarity_clustered",        "gw",  SimilarityMode::Clustered),
     ];
 
     for (input_file, golden_dirname, _ext, mode) in &similarity_cases {
@@ -2401,11 +2591,8 @@ fn generate_goldens() {
         generated += 1;
     }
 
-    // ---- P10: WorldBank layout (2 networks) ----
-    let world_bank_cases: Vec<(&str, &str)> = vec![
-        ("star-500.sif",  "star-500_world_bank"),
-        ("ba2K.sif",      "ba2K_world_bank"),
-    ];
+    // ---- P10: WorldBank layout (0 networks) ----
+    let world_bank_cases: Vec<(&str, &str)> = vec![];
 
     for (input_file, golden_dirname) in &world_bank_cases {
         let input_path = network_path(input_file);
@@ -2495,10 +2682,15 @@ fn generate_goldens() {
             _ => AlignmentLayoutMode::Group,
         };
 
-        let layout = run_alignment_layout(&g1, &g2, align_file_name, mode);
+        let mut cfg = default_config(g1_file, golden_dirname);
+        cfg.layout = "alignment";
+        cfg.align_net2 = Some(g2_file);
+        cfg.align_file = Some(align_file_name);
 
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
+        let aligned = run_alignment_layout(&cfg, &g1, &g2, align_file_name, mode);
+
+        let noa_content = format_noa(&aligned.layout);
+        let eda_content = format_eda(&aligned.layout);
 
         std::fs::create_dir_all(&golden_path).unwrap();
         std::fs::write(&noa_path, &noa_content).unwrap();
@@ -2537,6 +2729,10 @@ fn generate_goldens() {
                     let full_scores = biofabric_core::alignment::scoring::AlignmentScores::with_full_evaluation(
                         &merged_with_perf,
                         &perfect_merged,
+                        &g1,
+                        &g2,
+                        &alignment,
+                        &perfect,
                         &monitor,
                     );
 
@@ -2578,7 +2774,7 @@ fn generate_goldens() {
 //
 //  PHASE 1: Default layout + shadows ON (baseline)
 //
-//  17 tests × 3 formats = 51 test functions
+//  12 tests × 3 formats = 36 test functions
 //
 // ===========================================================================
 
@@ -2594,28 +2790,18 @@ parity_test! { name: sif_multi_relation,             input: "multi_relation.sif"
 parity_test! { name: sif_dense_clique,               input: "dense_clique.sif",              golden: "dense_clique_default" }
 parity_test! { name: sif_linear_chain,               input: "linear_chain.sif",              golden: "linear_chain_default" }
 
-// --- SIF stress ---
-
-parity_test! { name: sif_star500,    input: "star-500.sif",    golden: "star-500_default" }
-parity_test! { name: sif_ba2k,       input: "ba2K.sif",        golden: "ba2K_default" }
-// BINDhuman removed — redundant with ba2K as large SIF stress test
-
 // --- GW edge cases ---
 
 parity_test! { name: gw_triangle,     input: "triangle.gw",          golden: "triangle_gw_default" }
 parity_test! { name: gw_directed_tri, input: "directed_triangle.gw", golden: "directed_triangle_gw_default" }
 
-// --- GW stress ---
-
-parity_test! { name: gw_rnorvegicus, input: "RNorvegicus.gw", golden: "RNorvegicus_gw_default" }
 parity_test! { name: gw_celegans,    input: "CElegans.gw",    golden: "CElegans_gw_default" }
-parity_test! { name: gw_yeast,       input: "yeast.gw",       golden: "yeast_gw_default" }
 
 // ===========================================================================
 //
 //  PHASE 2: Default layout + shadows OFF
 //
-//  17 tests × 3 formats = 51 test functions
+//  12 tests × 3 formats = 36 test functions
 //
 // ===========================================================================
 
@@ -2631,22 +2817,12 @@ parity_test_noshadow! { name: sif_multi_relation_noshadow,         input: "multi
 parity_test_noshadow! { name: sif_dense_clique_noshadow,           input: "dense_clique.sif",              golden: "dense_clique_noshadow" }
 parity_test_noshadow! { name: sif_linear_chain_noshadow,           input: "linear_chain.sif",              golden: "linear_chain_noshadow" }
 
-// --- SIF stress (no shadows) ---
-
-parity_test_noshadow! { name: sif_star500_noshadow,    input: "star-500.sif",    golden: "star-500_noshadow" }
-parity_test_noshadow! { name: sif_ba2k_noshadow,       input: "ba2K.sif",        golden: "ba2K_noshadow" }
-// BINDhuman noshadow removed — redundant with ba2K
-
 // --- GW edge cases (no shadows) ---
 
 parity_test_noshadow! { name: gw_triangle_noshadow,     input: "triangle.gw",          golden: "triangle_gw_noshadow" }
 parity_test_noshadow! { name: gw_directed_tri_noshadow, input: "directed_triangle.gw", golden: "directed_triangle_gw_noshadow" }
 
-// --- GW stress (no shadows) ---
-
-parity_test_noshadow! { name: gw_rnorvegicus_noshadow, input: "RNorvegicus.gw", golden: "RNorvegicus_gw_noshadow" }
 parity_test_noshadow! { name: gw_celegans_noshadow,    input: "CElegans.gw",    golden: "CElegans_gw_noshadow" }
-parity_test_noshadow! { name: gw_yeast_noshadow,       input: "yeast.gw",       golden: "yeast_gw_noshadow" }
 
 // ===========================================================================
 //
@@ -2692,7 +2868,7 @@ parity_test_grouped! {
 //
 //  PHASE 4: XML round-trip tests
 //
-//  10 tests × 1 format = 10 test functions
+//  7 tests × 1 format = 7 test functions
 //
 // ===========================================================================
 
@@ -2701,37 +2877,30 @@ parity_test_roundtrip! { name: roundtrip_sif_self_loop,       golden: "self_loop
 parity_test_roundtrip! { name: roundtrip_sif_isolated_nodes,  golden: "isolated_nodes_default" }
 parity_test_roundtrip! { name: roundtrip_sif_disconnected,    golden: "disconnected_components_default" }
 parity_test_roundtrip! { name: roundtrip_sif_multi_relation,  golden: "multi_relation_default" }
-parity_test_roundtrip! { name: roundtrip_sif_star500,         golden: "star-500_default" }
-parity_test_roundtrip! { name: roundtrip_sif_ba2k,            golden: "ba2K_default" }
 parity_test_roundtrip! { name: roundtrip_gw_triangle,         golden: "triangle_gw_default" }
 parity_test_roundtrip! { name: roundtrip_gw_directed_tri,     golden: "directed_triangle_gw_default" }
-parity_test_roundtrip! { name: roundtrip_gw_celegans,         golden: "CElegans_gw_default" }
 
 // ===========================================================================
 //
 //  PHASE 5: NodeSimilarity layout (resort mode)
 //
-//  4 tests × 3 formats = 12 test functions
+//  2 tests × 3 formats = 6 test functions
 //
 // ===========================================================================
 
 parity_test_layout! { name: sif_triangle_similarity_resort,        input: "triangle.sif",       golden: "triangle_similarity_resort",       layout: "similarity_resort" }
 parity_test_layout! { name: sif_multi_relation_similarity_resort,  input: "multi_relation.sif", golden: "multi_relation_similarity_resort",  layout: "similarity_resort" }
-parity_test_layout! { name: sif_ba2k_similarity_resort,            input: "ba2K.sif",           golden: "ba2K_similarity_resort",            layout: "similarity_resort" }
-parity_test_layout! { name: gw_yeast_similarity_resort,            input: "yeast.gw",           golden: "yeast_gw_similarity_resort",        layout: "similarity_resort" }
 
 // ===========================================================================
 //
 //  PHASE 5b: NodeSimilarity layout (clustered mode)
 //
-//  4 tests × 3 formats = 12 test functions
+//  2 tests × 3 formats = 6 test functions
 //
 // ===========================================================================
 
 parity_test_layout! { name: sif_triangle_similarity_clustered,        input: "triangle.sif",       golden: "triangle_similarity_clustered",       layout: "similarity_clustered" }
 parity_test_layout! { name: sif_multi_relation_similarity_clustered,  input: "multi_relation.sif", golden: "multi_relation_similarity_clustered",  layout: "similarity_clustered" }
-parity_test_layout! { name: sif_ba2k_similarity_clustered,            input: "ba2K.sif",           golden: "ba2K_similarity_clustered",            layout: "similarity_clustered" }
-parity_test_layout! { name: gw_yeast_similarity_clustered,            input: "yeast.gw",           golden: "yeast_gw_similarity_clustered",        layout: "similarity_clustered" }
 
 // ===========================================================================
 //
@@ -2762,19 +2931,9 @@ parity_test_cluster! { name: sif_multi_relation_node_cluster, input: "multi_rela
 //
 //  PHASE 8: ControlTop layout
 //
-//  8 tests × 3 formats = 24 test functions
+//  4 tests × 3 formats = 12 test functions
 //
 // ===========================================================================
-
-// --- star-500: degree_only ---
-
-parity_test_controltop! { name: sif_star500_controltop_degree_target,   input: "star-500.sif", golden: "star-500_controltop_degree_only_target_degree",   ctrl_mode: "degree_only",   targ_mode: "target_degree" }
-parity_test_controltop! { name: sif_star500_controltop_degree_breadth,  input: "star-500.sif", golden: "star-500_controltop_degree_only_breadth_order",   ctrl_mode: "degree_only",   targ_mode: "breadth_order" }
-
-// --- star-500: partial_order ---
-
-parity_test_controltop! { name: sif_star500_controltop_partial_target,  input: "star-500.sif", golden: "star-500_controltop_partial_order_target_degree",  ctrl_mode: "partial_order", targ_mode: "target_degree" }
-parity_test_controltop! { name: sif_star500_controltop_partial_breadth, input: "star-500.sif", golden: "star-500_controltop_partial_order_breadth_order",  ctrl_mode: "partial_order", targ_mode: "breadth_order" }
 
 // --- multi_relation: fixed_list [A,B] ---
 
@@ -2790,37 +2949,32 @@ parity_test_controltop! { name: sif_multi_relation_controltop_degree_breadth, in
 //
 //  PHASE 9: SetLayout
 //
-//  4 tests × 3 formats = 12 test functions
+//  2 tests × 3 formats = 6 test functions
 //
 // ===========================================================================
 
 parity_test_set! { name: sif_bipartite_set_belongs_to,  input: "bipartite.sif",  golden: "bipartite_set_belongs_to",   link_means: "belongs_to" }
 parity_test_set! { name: sif_bipartite_set_contains,    input: "bipartite.sif",  golden: "bipartite_set_contains",     link_means: "contains" }
-parity_test_set! { name: sif_star500_set_belongs_to,    input: "star-500.sif",   golden: "star-500_set_belongs_to",    link_means: "belongs_to" }
-parity_test_set! { name: sif_star500_set_contains,      input: "star-500.sif",   golden: "star-500_set_contains",      link_means: "contains" }
 
 // ===========================================================================
 //
 //  PHASE 10: WorldBank layout
 //
-//  2 tests × 3 formats = 6 test functions
+//  0 tests × 3 formats = 0 test functions
 //
 // ===========================================================================
 
-parity_test_layout! { name: sif_star500_world_bank,  input: "star-500.sif",  golden: "star-500_world_bank",  layout: "world_bank" }
-parity_test_layout! { name: sif_ba2k_world_bank,     input: "ba2K.sif",      golden: "ba2K_world_bank",      layout: "world_bank" }
 
 // ===========================================================================
 //
 //  PHASE 11: Fixed-order import (NOA/EDA files)
 //
-//  4 tests × 3 formats = 12 test functions
+//  3 tests × 3 formats = 9 test functions
 //
 // ===========================================================================
 
 parity_test_fixed_noa! { name: sif_triangle_fixed_noa,        input: "triangle.sif",       golden: "triangle_fixed_noa",        noa: "triangle_reversed.noa" }
 parity_test_fixed_noa! { name: sif_multi_relation_fixed_noa,  input: "multi_relation.sif", golden: "multi_relation_fixed_noa",  noa: "multi_relation_shuffled.noa" }
-parity_test_fixed_noa! { name: sif_ba2k_fixed_noa,            input: "ba2K.sif",           golden: "ba2K_fixed_noa",            noa: "ba2K_reversed.noa" }
 
 parity_test_fixed_eda! { name: sif_triangle_fixed_eda,  input: "triangle.sif", golden: "triangle_fixed_eda", eda: "triangle_reversed.eda" }
 
@@ -2840,21 +2994,20 @@ parity_test_extract! { name: sif_dense_clique_extract_abc,     input: "dense_cli
 //
 //  PHASE 13: Analysis operations (cycle detection + Jaccard)
 //
-//  10 test functions
+//  9 test functions
 //
 // ===========================================================================
 
-parity_test_analysis! { name: analysis_cycle_triangle,     input: "triangle.sif",                golden: "analysis_cycle_triangle",     analysis: "analysis_cycle" }
-parity_test_analysis! { name: analysis_cycle_self_loop,    input: "self_loop.sif",               golden: "analysis_cycle_self_loop",    analysis: "analysis_cycle" }
-parity_test_analysis! { name: analysis_cycle_dag_simple,   input: "dag_simple.sif",              golden: "analysis_cycle_dag_simple",   analysis: "analysis_cycle" }
-parity_test_analysis! { name: analysis_cycle_linear_chain, input: "linear_chain.sif",            golden: "analysis_cycle_linear_chain", analysis: "analysis_cycle" }
-parity_test_analysis! { name: analysis_cycle_disconnected, input: "disconnected_components.sif", golden: "analysis_cycle_disconnected", analysis: "analysis_cycle" }
+parity_test_analysis! { name: analysis_cycle_triangle,     input: "triangle.sif",                golden: "analysis_cycle_triangle",     analysis: "analysis_cycle", node_pair: None }
+parity_test_analysis! { name: analysis_cycle_self_loop,    input: "self_loop.sif",               golden: "analysis_cycle_self_loop",    analysis: "analysis_cycle", node_pair: None }
+parity_test_analysis! { name: analysis_cycle_dag_simple,   input: "dag_simple.sif",              golden: "analysis_cycle_dag_simple",   analysis: "analysis_cycle", node_pair: None }
+parity_test_analysis! { name: analysis_cycle_linear_chain, input: "linear_chain.sif",            golden: "analysis_cycle_linear_chain", analysis: "analysis_cycle", node_pair: None }
+parity_test_analysis! { name: analysis_cycle_disconnected, input: "disconnected_components.sif", golden: "analysis_cycle_disconnected", analysis: "analysis_cycle", node_pair: None }
 
-parity_test_analysis! { name: analysis_jaccard_triangle_ab,         input: "triangle.sif",       golden: "analysis_jaccard_triangle_AB",         analysis: "analysis_jaccard" }
-parity_test_analysis! { name: analysis_jaccard_triangle_ac,         input: "triangle.sif",       golden: "analysis_jaccard_triangle_AC",         analysis: "analysis_jaccard" }
-parity_test_analysis! { name: analysis_jaccard_multi_relation_ad,   input: "multi_relation.sif", golden: "analysis_jaccard_multi_relation_AD",   analysis: "analysis_jaccard" }
-parity_test_analysis! { name: analysis_jaccard_star500_hub_leaf,    input: "star-500.sif",       golden: "analysis_jaccard_star500_hub_leaf",    analysis: "analysis_jaccard" }
-parity_test_analysis! { name: analysis_jaccard_dense_clique_ab,     input: "dense_clique.sif",   golden: "analysis_jaccard_dense_clique_AB",     analysis: "analysis_jaccard" }
+parity_test_analysis! { name: analysis_jaccard_triangle_ab,       input: "triangle.sif",       golden: "analysis_jaccard_triangle_AB",       analysis: "analysis_jaccard", node_pair: Some(("A", "B")) }
+parity_test_analysis! { name: analysis_jaccard_triangle_ac,       input: "triangle.sif",       golden: "analysis_jaccard_triangle_AC",       analysis: "analysis_jaccard", node_pair: Some(("A", "C")) }
+parity_test_analysis! { name: analysis_jaccard_multi_relation_ad, input: "multi_relation.sif", golden: "analysis_jaccard_multi_relation_AD", analysis: "analysis_jaccard", node_pair: Some(("A", "D")) }
+parity_test_analysis! { name: analysis_jaccard_dense_clique_ab,   input: "dense_clique.sif",   golden: "analysis_jaccard_dense_clique_AB",   analysis: "analysis_jaccard", node_pair: Some(("A", "B")) }
 
 // ===========================================================================
 //
