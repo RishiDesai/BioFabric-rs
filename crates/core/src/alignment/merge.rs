@@ -82,50 +82,288 @@ impl MergedNetwork {
     /// A `MergedNetwork` containing the combined graph with classified nodes
     /// and edges.
     pub fn from_alignment(
-        _g1: &Network,
-        _g2: &Network,
-        _alignment: &AlignmentMap,
-        _perfect: Option<&AlignmentMap>,
+        g1: &Network,
+        g2: &Network,
+        alignment: &AlignmentMap,
+        perfect: Option<&AlignmentMap>,
         _monitor: &dyn ProgressMonitor,
     ) -> Result<Self, String> {
-        // TODO: Implement network merging
-        //
-        // Algorithm (see NetworkAlignment.mergeNetworks()):
-        //
-        // 1. Create merged nodes:
-        //    a. For each (g1_node, g2_node) in alignment: create purple node "g1::g2"
-        //       - If `perfect` is Some, compute correctness:
-        //         `correct = perfect[g1] == Some(g2)` and store in merged_to_correct
-        //    b. For each G1 node NOT in alignment: create blue node "g1::"
-        //       - If `perfect` is Some, compute correctness:
-        //         `correct = perfect[g1].is_none()` (correctly unaligned if perfect
-        //         also doesn't align it)
-        //    c. For each G2 node NOT in alignment values: create red node "::g2"
-        //       - Red nodes do NOT get correctness entries (Java doesn't track them)
-        //
-        // 2. Build lookup maps:
-        //    a. g1_name -> merged_node_id
-        //    b. g2_name -> merged_node_id
-        //
-        // 3. Transform edges:
-        //    a. For each edge in G1: map source/target to merged IDs, add to merged network
-        //    b. For each edge in G2: map source/target to merged IDs, add to merged network
-        //    c. Deduplicate: edges present in both G1 and G2 (via aligned endpoints) = COVERED
-        //
-        // 4. Classify edges:
-        //    For each merged edge, determine EdgeType based on endpoint colors:
-        //    - Both purple, exists in both -> Covered
-        //    - Both purple, G1 only -> InducedGraph1
-        //    - Purple + Blue -> HalfOrphanGraph1
-        //    - Both Blue -> FullOrphanGraph1
-        //    - Both purple, G2 only -> InducedGraph2
-        //    - Purple + Red -> HalfUnalignedGraph2
-        //    - Both Red -> FullUnalignedGraph2
-        //
-        // 5. Populate counts and return
-        //    - Set merged_to_correct = Some(map) if perfect.is_some(), else None
-        //
-        todo!("Implement network merging - see NetworkAlignment.mergeNetworks()")
+        use std::collections::HashSet;
+
+        let mut node_colors: HashMap<NodeId, NodeColor> = HashMap::new();
+        let mut node_origins: HashMap<NodeId, MergedNodeId> = HashMap::new();
+        let mut merged_to_correct: Option<HashMap<NodeId, bool>> = if perfect.is_some() {
+            Some(HashMap::new())
+        } else {
+            None
+        };
+
+        // Maps from original node names to merged node IDs
+        let mut g1_to_merged: HashMap<NodeId, NodeId> = HashMap::new();
+        let mut g2_to_merged: HashMap<NodeId, NodeId> = HashMap::new();
+
+        // Collect all G2 nodes that are alignment targets
+        let aligned_g2: HashSet<&NodeId> = alignment.values().collect();
+
+        // 1a. Create purple (aligned) nodes
+        let aligned_count = alignment.len();
+        for (g1_node, g2_node) in alignment {
+            let merged_id = MergedNodeId::aligned(g1_node.as_str(), g2_node.as_str());
+            let node_id = merged_id.to_node_id();
+
+            node_colors.insert(node_id.clone(), NodeColor::Purple);
+            node_origins.insert(node_id.clone(), merged_id);
+            g1_to_merged.insert(g1_node.clone(), node_id.clone());
+            g2_to_merged.insert(g2_node.clone(), node_id.clone());
+
+            if let Some(ref mut correct_map) = merged_to_correct {
+                let is_correct = perfect
+                    .and_then(|p| p.get(g1_node))
+                    .map(|perfect_g2| perfect_g2 == g2_node)
+                    .unwrap_or(false);
+                correct_map.insert(node_id, is_correct);
+            }
+        }
+
+        // 1b. Create blue (unaligned G1) nodes
+        // Extract all G1 nodes from links + lone nodes
+        let g1_nodes: HashSet<NodeId> = {
+            let mut nodes: HashSet<NodeId> = HashSet::new();
+            for link in g1.links() {
+                if !link.is_shadow {
+                    nodes.insert(link.source.clone());
+                    nodes.insert(link.target.clone());
+                }
+            }
+            for lone in g1.lone_nodes() {
+                nodes.insert(lone.clone());
+            }
+            nodes
+        };
+
+        for g1_node in &g1_nodes {
+            if g1_to_merged.contains_key(g1_node) {
+                continue; // Already aligned
+            }
+            let merged_id = MergedNodeId::g1_only(g1_node.as_str());
+            let node_id = merged_id.to_node_id();
+
+            node_colors.insert(node_id.clone(), NodeColor::Blue);
+            node_origins.insert(node_id.clone(), merged_id);
+            g1_to_merged.insert(g1_node.clone(), node_id.clone());
+
+            if let Some(ref mut correct_map) = merged_to_correct {
+                // Blue node is correct if perfect alignment also doesn't align it
+                let is_correct = perfect
+                    .map(|p| p.get(g1_node).is_none())
+                    .unwrap_or(false);
+                correct_map.insert(node_id, is_correct);
+            }
+        }
+
+        // 1c. Create red (unaligned G2) nodes
+        let g2_nodes: HashSet<NodeId> = {
+            let mut nodes: HashSet<NodeId> = HashSet::new();
+            for link in g2.links() {
+                if !link.is_shadow {
+                    nodes.insert(link.source.clone());
+                    nodes.insert(link.target.clone());
+                }
+            }
+            for lone in g2.lone_nodes() {
+                nodes.insert(lone.clone());
+            }
+            nodes
+        };
+
+        for g2_node in &g2_nodes {
+            if g2_to_merged.contains_key(g2_node) {
+                continue; // Already aligned
+            }
+            let merged_id = MergedNodeId::g2_only(g2_node.as_str());
+            let node_id = merged_id.to_node_id();
+
+            node_colors.insert(node_id.clone(), NodeColor::Red);
+            node_origins.insert(node_id.clone(), merged_id);
+            g2_to_merged.insert(g2_node.clone(), node_id.clone());
+            // Red nodes do NOT get correctness entries
+        }
+
+        // 2. Transform edges from G1 and G2
+        // Build new link lists with merged IDs (deduplicating within each network)
+        let mut new_links_g1: Vec<(NodeId, NodeId)> = Vec::new();
+        {
+            let mut link_set: HashSet<(NodeId, NodeId)> = HashSet::new();
+            for link in g1.links() {
+                if link.is_shadow {
+                    continue;
+                }
+                let new_src = g1_to_merged.get(&link.source).cloned()
+                    .ok_or_else(|| format!("G1 node {} not in merged map", link.source))?;
+                let new_tgt = g1_to_merged.get(&link.target).cloned()
+                    .ok_or_else(|| format!("G1 node {} not in merged map", link.target))?;
+                // Normalize undirected: (min, max)
+                let key = if new_src <= new_tgt {
+                    (new_src.clone(), new_tgt.clone())
+                } else {
+                    (new_tgt.clone(), new_src.clone())
+                };
+                if link_set.insert(key) {
+                    new_links_g1.push((new_src, new_tgt));
+                }
+            }
+        }
+
+        let mut new_links_g2: Vec<(NodeId, NodeId)> = Vec::new();
+        {
+            let mut link_set: HashSet<(NodeId, NodeId)> = HashSet::new();
+            for link in g2.links() {
+                if link.is_shadow {
+                    continue;
+                }
+                let new_src = g2_to_merged.get(&link.source).cloned()
+                    .ok_or_else(|| format!("G2 node {} not in merged map", link.source))?;
+                let new_tgt = g2_to_merged.get(&link.target).cloned()
+                    .ok_or_else(|| format!("G2 node {} not in merged map", link.target))?;
+                let key = if new_src <= new_tgt {
+                    (new_src.clone(), new_tgt.clone())
+                } else {
+                    (new_tgt.clone(), new_src.clone())
+                };
+                if link_set.insert(key) {
+                    new_links_g2.push((new_src, new_tgt));
+                }
+            }
+        }
+
+        // 3. Build sorted lookup for binary search (matching Java's approach)
+        // Build a set of normalized G1 edges for fast lookup
+        let g1_edge_set: HashSet<(NodeId, NodeId)> = new_links_g1
+            .iter()
+            .map(|(s, t)| {
+                if s <= t { (s.clone(), t.clone()) } else { (t.clone(), s.clone()) }
+            })
+            .collect();
+
+        let g2_edge_set: HashSet<(NodeId, NodeId)> = new_links_g2
+            .iter()
+            .map(|(s, t)| {
+                if s <= t { (s.clone(), t.clone()) } else { (t.clone(), s.clone()) }
+            })
+            .collect();
+
+        // Set of aligned node IDs (purple nodes via G1 mapping)
+        let aligned_nodes_g1: HashSet<&NodeId> = alignment.keys()
+            .filter_map(|g1| g1_to_merged.get(g1))
+            .collect();
+
+        let aligned_nodes_g2: HashSet<&NodeId> = alignment.values()
+            .filter_map(|g2| g2_to_merged.get(g2))
+            .collect();
+
+        // 4. Create merged link list with edge type classification
+        let mut network = Network::new();
+        let mut edge_types: Vec<EdgeType> = Vec::new();
+
+        // Process G2 edges first (matching Java's createMergedLinkList order)
+        for (src, tgt) in &new_links_g2 {
+            let norm_key = if src <= tgt {
+                (src.clone(), tgt.clone())
+            } else {
+                (tgt.clone(), src.clone())
+            };
+
+            let edge_type = if g1_edge_set.contains(&norm_key) {
+                // Edge exists in both networks = COVERED
+                EdgeType::Covered
+            } else {
+                let src_aligned = aligned_nodes_g2.contains(src);
+                let tgt_aligned = aligned_nodes_g2.contains(tgt);
+                if src_aligned && tgt_aligned {
+                    EdgeType::InducedGraph2
+                } else if src_aligned || tgt_aligned {
+                    EdgeType::HalfUnalignedGraph2
+                } else {
+                    EdgeType::FullUnalignedGraph2
+                }
+            };
+
+            let tag = edge_type.short_code();
+
+            // Add non-shadow link
+            let link = crate::model::Link::new(src.clone(), tgt.clone(), tag);
+            network.add_link(link);
+            edge_types.push(edge_type);
+
+            // Add shadow link (unless self-loop)
+            if src != tgt {
+                let shadow = crate::model::Link::with_shadow(tgt.clone(), src.clone(), tag, true);
+                network.add_link(shadow);
+                edge_types.push(edge_type);
+            }
+        }
+
+        // Process G1 edges (only those NOT in G2 = not covered)
+        for (src, tgt) in &new_links_g1 {
+            let norm_key = if src <= tgt {
+                (src.clone(), tgt.clone())
+            } else {
+                (tgt.clone(), src.clone())
+            };
+
+            if g2_edge_set.contains(&norm_key) {
+                // Already added as COVERED from G2 pass
+                continue;
+            }
+
+            let src_aligned = aligned_nodes_g1.contains(src);
+            let tgt_aligned = aligned_nodes_g1.contains(tgt);
+
+            let edge_type = if src_aligned && tgt_aligned {
+                EdgeType::InducedGraph1
+            } else if src_aligned || tgt_aligned {
+                EdgeType::HalfOrphanGraph1
+            } else {
+                EdgeType::FullOrphanGraph1
+            };
+
+            let tag = edge_type.short_code();
+
+            // Add non-shadow link
+            let link = crate::model::Link::new(src.clone(), tgt.clone(), tag);
+            network.add_link(link);
+            edge_types.push(edge_type);
+
+            // Add shadow link (unless self-loop)
+            if src != tgt {
+                let shadow = crate::model::Link::with_shadow(tgt.clone(), src.clone(), tag, true);
+                network.add_link(shadow);
+                edge_types.push(edge_type);
+            }
+        }
+
+        // Add lone nodes from both networks
+        for lone in g1.lone_nodes() {
+            if let Some(merged_id) = g1_to_merged.get(lone) {
+                network.add_lone_node(merged_id.clone());
+            }
+        }
+        for lone in g2.lone_nodes() {
+            if let Some(merged_id) = g2_to_merged.get(lone) {
+                network.add_lone_node(merged_id.clone());
+            }
+        }
+
+        Ok(MergedNetwork {
+            network,
+            node_colors,
+            edge_types,
+            node_origins,
+            merged_to_correct,
+            g1_node_count: g1_nodes.len(),
+            g2_node_count: g2_nodes.len(),
+            aligned_count,
+        })
     }
 
     /// Count of nodes by color.

@@ -14,6 +14,11 @@
 
 use std::path::PathBuf;
 
+use biofabric_core::alignment::merge::MergedNetwork;
+use biofabric_core::alignment::scoring::AlignmentScores;
+use biofabric_core::model::Network;
+use biofabric_core::worker::NoopMonitor;
+
 // ---------------------------------------------------------------------------
 // Test infrastructure
 // ---------------------------------------------------------------------------
@@ -32,6 +37,60 @@ fn network_path(filename: &str) -> PathBuf {
         _ => "sif",
     };
     parity_root().join("networks").join(subdir).join(filename)
+}
+
+/// Path to an alignment file.
+fn align_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("align").join(filename)
+}
+
+/// Load a network from a file based on extension.
+fn load_network(path: &std::path::Path) -> Network {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("sif") => biofabric_core::io::sif::parse_file(path).unwrap(),
+        Some("gw") => biofabric_core::io::gw::parse_file(path).unwrap(),
+        _ => panic!("Unknown input format: {}", path.display()),
+    }
+}
+
+/// Get the alignment config for a golden dir name.
+/// Returns (g1_file, g2_file, align_file, perfect_align_file).
+fn alignment_config_for_golden(golden_dir: &str) -> Option<(&'static str, &'static str, &'static str, Option<&'static str>)> {
+    // Case study IV configs
+    if golden_dir.starts_with("align_casestudy_iv") {
+        let align = "casestudy_iv.align";
+        let perfect = Some("casestudy_iv.align"); // It's a perfect alignment (same file)
+        return Some(("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", align, perfect));
+    }
+
+    // Yeast SC configs
+    if golden_dir.starts_with("align_yeast_sc_") {
+        let suffix = &golden_dir["align_yeast_sc_".len()..];
+        let align_file = match suffix {
+            s if s.starts_with("perfect") => "yeast_sc_perfect.align",
+            s if s.starts_with("s3_pure") => "yeast_sc_s3_pure.align",
+            s if s.starts_with("s3_050") => "yeast_sc_s3_050.align",
+            s if s.starts_with("s3_001") => "yeast_sc_s3_001.align",
+            s if s.starts_with("s3_003") => "yeast_sc_s3_003.align",
+            s if s.starts_with("s3_005") => "yeast_sc_s3_005.align",
+            s if s.starts_with("s3_010") => "yeast_sc_s3_010.align",
+            s if s.starts_with("s3_030") => "yeast_sc_s3_030.align",
+            s if s.starts_with("s3_100") => "yeast_sc_s3_100.align",
+            s if s.starts_with("importance_pure") => "yeast_sc_importance_pure.align",
+            _ => return None,
+        };
+        return Some(("Yeast2KReduced.sif", "SC.sif", align_file, Some("yeast_sc_perfect.align")));
+    }
+
+    // Simple test configs
+    if golden_dir == "align_perfect" {
+        return Some(("align_net1.sif", "align_net2.sif", "test_perfect.align", Some("test_perfect.align")));
+    }
+    if golden_dir == "align_partial" {
+        return Some(("align_net1.sif", "align_net2.sif", "test_partial.align", Some("test_perfect.align")));
+    }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -680,8 +739,8 @@ fn degree_dag_simple() {
 /// Test that alignment scoring produces the expected metric values.
 /// Scores are read from golden output.scores files (tab-separated: name\tvalue).
 #[allow(dead_code)]
-fn run_alignment_score_test(golden_dir: &str, _metric: &str, _expected_approx: f64) {
-    let scores_path = parity_root().join("goldens").join(golden_dir).join("output.scores");
+fn run_alignment_score_test(golden_dir_name: &str, metric: &str, _expected_approx: f64) {
+    let scores_path = parity_root().join("goldens").join(golden_dir_name).join("output.scores");
     if !scores_path.exists() {
         eprintln!(
             "SKIP: scores file not found at {}. Run golden generation first.",
@@ -690,13 +749,140 @@ fn run_alignment_score_test(golden_dir: &str, _metric: &str, _expected_approx: f
         return;
     }
 
-    // TODO: Read the golden scores file
-    // TODO: Parse "metricName\tvalue" lines
-    // TODO: Find the requested metric
-    // TODO: Also compute the metric from the Rust alignment pipeline
-    // TODO: Compare within tolerance (1e-10)
+    // Read the golden scores file
+    let scores_content = std::fs::read_to_string(&scores_path).unwrap();
+    let mut golden_value: Option<f64> = None;
 
-    eprintln!("  Alignment scoring: STUB (implementation pending)");
+    // Map metric display name to the Java property key
+    let metric_key = match metric {
+        "Edge Coverage" => "networkAlignment.edgeCoverage",
+        "Symmetric Substructure Score" => "networkAlignment.symmetricSubstructureScore",
+        "Induced Conserved Structure" => "networkAlignment.inducedConservedStructure",
+        "Node Correctness" => "networkAlignment.nodeCorrectness",
+        "Node Group Similarity" => "networkAlignment.nodeGroupSimilarity",
+        "Link Group Similarity" => "networkAlignment.linkGroupSimilarity",
+        "Jaccard Similarity" => "networkAlignment.jaccardSimilarity",
+        _ => metric,
+    };
+
+    for line in scores_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some((key, value_str)) = trimmed.split_once('\t') {
+            if key.trim() == metric_key {
+                golden_value = value_str.trim().parse::<f64>().ok();
+            }
+        }
+    }
+
+    let golden = match golden_value {
+        Some(v) => v,
+        None => {
+            eprintln!(
+                "SKIP: metric '{}' (key '{}') not found in {}",
+                metric,
+                metric_key,
+                scores_path.display()
+            );
+            return;
+        }
+    };
+
+    // Look up alignment config
+    let config = match alignment_config_for_golden(golden_dir_name) {
+        Some(c) => c,
+        None => {
+            eprintln!("SKIP: no alignment config for golden dir '{}'", golden_dir_name);
+            return;
+        }
+    };
+
+    let (g1_file, g2_file, align_file, perfect_file) = config;
+
+    // Load networks
+    let g1_path = network_path(g1_file);
+    let g2_path = network_path(g2_file);
+    if !g1_path.exists() || !g2_path.exists() {
+        eprintln!("SKIP: input networks not found");
+        return;
+    }
+    let g1 = load_network(&g1_path);
+    let g2 = load_network(&g2_path);
+
+    // Parse alignment
+    let align_path = align_file_path(align_file);
+    if !align_path.exists() {
+        eprintln!("SKIP: alignment file not found: {}", align_path.display());
+        return;
+    }
+    let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
+
+    // Parse perfect alignment if available
+    let perfect_alignment = perfect_file.and_then(|pf| {
+        let pp = align_file_path(pf);
+        if pp.exists() {
+            biofabric_core::io::align::parse_file(&pp).ok()
+        } else {
+            None
+        }
+    });
+
+    let monitor = NoopMonitor;
+
+    // Merge networks
+    let merged = MergedNetwork::from_alignment(
+        &g1,
+        &g2,
+        &alignment,
+        perfect_alignment.as_ref(),
+        &monitor,
+    )
+    .unwrap();
+
+    // Compute scores
+    let scores = if let Some(ref perf_align) = perfect_alignment {
+        // Build perfect merged network for NGS/LGS
+        let perfect_merged = MergedNetwork::from_alignment(
+            &g1,
+            &g2,
+            perf_align,
+            Some(perf_align),
+            &monitor,
+        )
+        .unwrap();
+
+        AlignmentScores::with_full_evaluation(&merged, &perfect_merged, &monitor)
+    } else {
+        AlignmentScores::topological(&merged, &monitor)
+    };
+
+    // Extract the computed metric value
+    let computed = match metric {
+        "Edge Coverage" => scores.ec,
+        "Symmetric Substructure Score" => scores.s3,
+        "Induced Conserved Structure" => scores.ics,
+        "Node Correctness" => scores.nc.unwrap_or(0.0),
+        "Node Group Similarity" => scores.ngs.unwrap_or(0.0),
+        "Link Group Similarity" => scores.lgs.unwrap_or(0.0),
+        "Jaccard Similarity" => scores.js.unwrap_or(0.0),
+        _ => {
+            eprintln!("SKIP: unknown metric '{}'", metric);
+            return;
+        }
+    };
+
+    let tolerance = 1e-8;
+    assert!(
+        (computed - golden).abs() < tolerance,
+        "Alignment scoring mismatch for {} in {}:\n  Expected: {:.10}\n  Computed: {:.10}\n  Diff:     {:.2e}",
+        metric,
+        golden_dir_name,
+        golden,
+        computed,
+        (computed - golden).abs()
+    );
 }
 
 #[test]

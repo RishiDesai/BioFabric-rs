@@ -34,7 +34,7 @@ use super::cycle_relation::CyclePositionMap;
 use super::orphan::OrphanFilter;
 use super::types::EdgeType;
 use crate::layout::build_data::{CycleBound, LayoutBuildData};
-use crate::layout::traits::{EdgeLayout, LayoutParams, LayoutResult, NodeLayout};
+use crate::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, LayoutResult, NodeLayout};
 use crate::layout::result::NetworkLayout;
 use crate::model::{Annotation, AnnotationSet, Network, NodeId};
 use crate::worker::ProgressMonitor;
@@ -95,32 +95,14 @@ impl NodeLayout for AlignmentNodeLayout {
     fn layout_nodes(
         &self,
         _network: &Network,
-        _params: &LayoutParams,
-        _monitor: &dyn ProgressMonitor,
+        params: &LayoutParams,
+        monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<Vec<NodeId>> {
-        // TODO: Implement alignment node layout
-        //
-        // Dispatch based on self.mode:
-        //
-        // GROUP mode (see NetworkAlignmentLayout.java):
-        //   1. Build NodeGroupMap if not already provided
-        //   2. For each group (in canonical order):
-        //      a. BFS within the group's members
-        //      b. Append to result
-        //   3. Create group annotations with appropriate colors
-        //
-        // ORPHAN mode (see orphan::OrphanFilter):
-        //   1. Use OrphanFilter::filter(&self.merged) to get filtered subnetwork
-        //   2. The filter includes orphan edges + context nodes
-        //   3. Apply DefaultNodeLayout to the filtered subgraph
-        //
-        // CYCLE mode (see AlignCycleLayout.java):
-        //   1. Detect cycles if not already provided
-        //   2. Order: correct singletons first, then cycles/paths
-        //   3. Within each cycle/path, unroll nodes in chain order
-        //   4. Create cycle/path annotations
-        //
-        todo!("Implement alignment node layout")
+        match self.mode {
+            AlignmentLayoutMode::Group => self.layout_group_mode(params, monitor),
+            AlignmentLayoutMode::Orphan => self.layout_orphan_mode(params, monitor),
+            AlignmentLayoutMode::Cycle => self.layout_cycle_mode(params, monitor),
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -129,6 +111,171 @@ impl NodeLayout for AlignmentNodeLayout {
             AlignmentLayoutMode::Orphan => "Alignment (Orphan)",
             AlignmentLayoutMode::Cycle => "Alignment (Cycle)",
         }
+    }
+}
+
+impl AlignmentNodeLayout {
+    /// GROUP mode: order by node group classification, BFS within each group.
+    fn layout_group_mode(
+        &self,
+        params: &LayoutParams,
+        monitor: &dyn ProgressMonitor,
+    ) -> LayoutResult<Vec<NodeId>> {
+        use crate::layout::default::DefaultNodeLayout;
+        use std::collections::{HashSet, VecDeque};
+
+        let groups = self.groups.as_ref().map(|g| g.clone()).unwrap_or_else(|| {
+            NodeGroupMap::from_merged(&self.merged, monitor)
+        });
+
+        let mut result: Vec<NodeId> = Vec::new();
+        let mut placed: HashSet<NodeId> = HashSet::new();
+
+        // Build neighbor map from the merged network (all links including shadows)
+        let mut neighbor_map: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        for node_id in self.merged.network.node_ids() {
+            neighbor_map.entry(node_id.clone()).or_default();
+        }
+        for link in self.merged.network.links() {
+            if link.source != link.target {
+                neighbor_map.entry(link.source.clone()).or_default().insert(link.target.clone());
+                neighbor_map.entry(link.target.clone()).or_default().insert(link.source.clone());
+            }
+        }
+
+        // Build degree map
+        let mut degree_map: HashMap<NodeId, usize> = HashMap::new();
+        for node_id in self.merged.network.node_ids() {
+            degree_map.insert(node_id.clone(), 0);
+        }
+        for link in self.merged.network.links() {
+            *degree_map.entry(link.source.clone()).or_insert(0) += 1;
+            *degree_map.entry(link.target.clone()).or_insert(0) += 1;
+        }
+
+        let node_cmp = |a: &NodeId, b: &NodeId| -> std::cmp::Ordering {
+            let deg_a = degree_map.get(a).copied().unwrap_or(0);
+            let deg_b = degree_map.get(b).copied().unwrap_or(0);
+            deg_b.cmp(&deg_a).then_with(|| a.cmp(b))
+        };
+
+        // For each group, BFS within that group's members
+        for group in &groups.groups {
+            let group_members: HashSet<NodeId> = group.members.iter().cloned().collect();
+
+            // Sort members by degree desc for BFS start
+            let mut ranked: Vec<NodeId> = group.members
+                .iter()
+                .filter(|n| !placed.contains(*n))
+                .cloned()
+                .collect();
+            ranked.sort_by(|a, b| node_cmp(a, b));
+
+            // BFS within this group
+            for start in ranked {
+                if placed.contains(&start) {
+                    continue;
+                }
+                let mut queue: VecDeque<NodeId> = VecDeque::new();
+                placed.insert(start.clone());
+                result.push(start.clone());
+                queue.push_back(start);
+
+                while let Some(node_id) = queue.pop_front() {
+                    let mut neighbors: Vec<NodeId> = neighbor_map
+                        .get(&node_id)
+                        .map(|n| {
+                            n.iter()
+                                .filter(|n| !placed.contains(*n) && group_members.contains(*n))
+                                .cloned()
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    neighbors.sort_by(|a, b| node_cmp(a, b));
+
+                    for neighbor in neighbors {
+                        if placed.insert(neighbor.clone()) {
+                            result.push(neighbor.clone());
+                            queue.push_back(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add any remaining nodes (lone nodes)
+        let mut lone: Vec<NodeId> = self.merged.network.lone_nodes().iter().cloned().collect();
+        lone.sort();
+        for node in lone {
+            if placed.insert(node.clone()) {
+                result.push(node);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// ORPHAN mode: filter to orphan edges + context, then default BFS layout.
+    fn layout_orphan_mode(
+        &self,
+        params: &LayoutParams,
+        monitor: &dyn ProgressMonitor,
+    ) -> LayoutResult<Vec<NodeId>> {
+        use crate::layout::default::DefaultNodeLayout;
+
+        let filtered = OrphanFilter::filter(&self.merged);
+        let default_layout = DefaultNodeLayout::new();
+        default_layout.layout_nodes(&filtered.network, params, monitor)
+    }
+
+    /// CYCLE mode: order nodes by alignment cycles and paths.
+    fn layout_cycle_mode(
+        &self,
+        _params: &LayoutParams,
+        monitor: &dyn ProgressMonitor,
+    ) -> LayoutResult<Vec<NodeId>> {
+        use crate::alignment::cycle::CycleCase;
+
+        let cycles = self.cycles.as_ref().cloned().unwrap_or_else(|| {
+            // We need the alignment and perfect alignment to detect cycles
+            // but we don't have them here — use what we have
+            super::cycle::AlignmentCycles {
+                entries: Vec::new(),
+                case_counts: [0; 9],
+            }
+        });
+
+        let mut result: Vec<NodeId> = Vec::new();
+
+        // Order: correct singletons first, then other entries
+        // First pass: correct entries
+        for entry in &cycles.entries {
+            if entry.case.is_correct() {
+                for node in &entry.nodes {
+                    result.push(node.clone());
+                }
+            }
+        }
+
+        // Second pass: incorrect entries
+        for entry in &cycles.entries {
+            if !entry.case.is_correct() {
+                for node in &entry.nodes {
+                    result.push(node.clone());
+                }
+            }
+        }
+
+        // Add any nodes not covered by cycles
+        let placed: HashSet<NodeId> = result.iter().cloned().collect();
+        let mut remaining: Vec<NodeId> = self.merged.network.node_ids()
+            .filter(|n| !placed.contains(*n))
+            .cloned()
+            .collect();
+        remaining.sort();
+        result.extend(remaining);
+
+        Ok(result)
     }
 }
 
@@ -336,30 +483,59 @@ impl AlignmentEdgeLayout {
 impl EdgeLayout for AlignmentEdgeLayout {
     fn layout_edges(
         &self,
-        _build_data: &mut LayoutBuildData,
-        _params: &LayoutParams,
-        _monitor: &dyn ProgressMonitor,
+        build_data: &mut LayoutBuildData,
+        params: &LayoutParams,
+        monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<NetworkLayout> {
-        // TODO: Implement alignment edge layout
-        //
-        // Shared pre-processing (all modes):
-        //   1. Set link_group_order to alignment_link_group_order()
-        //   2. Set layout_mode to PerNode
-        //
-        // GROUP mode (see NetworkAlignmentEdgeLayout.java):
-        //   - Run default edge ordering with PerNode link groups
-        //   - Override getColor to return null for link annotations (grayscale only)
-        //   - Generate link annotations with installLinkAnnotations()
-        //
-        // CYCLE mode (see AlignCycleEdgeLayout.java):
-        //   - Run default edge ordering with PerNode link groups
-        //   - Override calcGroupLinkAnnots with calc_cycle_link_annots()
-        //   - Use cycle_bounds from build_data.alignment_data
-        //
-        // ORPHAN mode:
-        //   - Run default edge layout on the filtered subgraph
-        //
-        todo!("Implement alignment edge layout")
+        use crate::layout::default::DefaultEdgeLayout;
+
+        // For all alignment modes, set link groups to the 7 edge type codes
+        let link_groups = Self::alignment_link_group_order();
+
+        // Create modified params with alignment link groups and PerNode mode
+        let mut align_params = params.clone();
+        align_params.link_groups = Some(link_groups.clone());
+        align_params.layout_mode = LayoutMode::PerNode;
+
+        // Use the default edge layout with alignment link groups
+        let default_edge = DefaultEdgeLayout::new();
+
+        // Override the layout mode on build_data
+        build_data.layout_mode = LayoutMode::PerNode;
+
+        let mut layout = default_edge.layout_edges(build_data, &align_params, monitor)?;
+
+        // Set the link group order on the layout
+        layout.link_group_order = link_groups.clone();
+
+        // Install link annotations based on mode
+        match self.mode {
+            AlignmentLayoutMode::Group => {
+                // GROUP mode: annotations use null/grayscale colors
+                DefaultEdgeLayout::install_link_annotations(&mut layout, &link_groups, None);
+            }
+            AlignmentLayoutMode::Cycle => {
+                // CYCLE mode: use cycle-specific link annotations if available
+                if let Some(ref align_data) = build_data.alignment_data {
+                    let cycle_annots = Self::calc_cycle_link_annots(
+                        &layout,
+                        &align_data.cycle_bounds,
+                        &build_data.node_to_row,
+                        build_data.has_shadows,
+                        align_data.use_node_groups,
+                    );
+                    layout.link_annotations = cycle_annots;
+                } else {
+                    DefaultEdgeLayout::install_link_annotations(&mut layout, &link_groups, None);
+                }
+            }
+            AlignmentLayoutMode::Orphan => {
+                // ORPHAN mode: standard link annotations
+                DefaultEdgeLayout::install_link_annotations(&mut layout, &link_groups, None);
+            }
+        }
+
+        Ok(layout)
     }
 
     fn name(&self) -> &'static str {
