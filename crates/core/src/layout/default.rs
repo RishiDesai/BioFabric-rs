@@ -484,10 +484,9 @@ impl EdgeLayout for DefaultEdgeLayout {
 
         // Initialize node layouts
         for (i, node_id) in build_data.node_order.iter().enumerate() {
-            layout.nodes.insert(
-                node_id.clone(),
-                NodeLayoutInfo::new(i, node_id.as_str()),
-            );
+            let mut nl = NodeLayoutInfo::new(i, node_id.as_str());
+            nl.color_index = i; // Color derived from row index
+            layout.nodes.insert(node_id.clone(), nl);
         }
 
         // Assign columns
@@ -516,6 +515,7 @@ impl EdgeLayout for DefaultEdgeLayout {
                 link.is_shadow,
             );
             ll.column_no_shadows = column_no_shadows;
+            ll.color_index = column; // Color derived from shadow column index
 
             // Update node spans
             if let Some(src_layout) = layout.nodes.get_mut(&link.source) {
