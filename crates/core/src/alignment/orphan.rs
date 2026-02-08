@@ -77,58 +77,54 @@ impl OrphanFilter {
     ///
     /// An `OrphanFilter` containing the filtered subnetwork.
     pub fn filter(merged: &MergedNetwork) -> Self {
-        // TODO: Implement orphan edge filtering
-        //
-        // Algorithm (see NetworkAlignment.OrphanEdgeLayout in Java):
-        //
-        // Pass 1 — Find blue (INDUCED_GRAPH1) nodes:
-        //   let mut blue_nodes: HashSet<NodeId> = HashSet::new();
-        //   for (i, link) in merged.network.links_slice().iter().enumerate() {
-        //       if merged.edge_types[i] == EdgeType::InducedGraph1 {
-        //           blue_nodes.insert(link.source().clone());
-        //           blue_nodes.insert(link.target().clone());
-        //       }
-        //   }
-        //
-        // Pass 2 — Collect all edges touching blue nodes (one-hop context):
-        //   let mut filtered_links = Vec::new();
-        //   let mut filtered_edge_types = Vec::new();
-        //   let mut original_indices = Vec::new();
-        //   let mut needed_nodes: HashSet<NodeId> = HashSet::new();
-        //   for (i, link) in merged.network.links_slice().iter().enumerate() {
-        //       let src = link.source();
-        //       let tgt = link.target();
-        //       if blue_nodes.contains(src) || blue_nodes.contains(tgt) {
-        //           filtered_links.push(link.clone());
-        //           filtered_edge_types.push(merged.edge_types[i]);
-        //           original_indices.push(i);
-        //           needed_nodes.insert(src.clone());
-        //           needed_nodes.insert(tgt.clone());
-        //       }
-        //   }
-        //
-        // Build filtered network:
-        //   let mut network = Network::new();
-        //   for link in &filtered_links {
-        //       network.add_link(link.clone());
-        //   }
-        //   // Lone nodes not included (cleared in Java)
-        //
-        // Identify context nodes:
-        //   let context_nodes: HashSet<NodeId> = needed_nodes
-        //       .iter()
-        //       .filter(|n| merged.node_color(n) == Some(NodeColor::Purple))
-        //       .cloned()
-        //       .collect();
-        //
-        // Return OrphanFilter {
-        //     network,
-        //     context_nodes,
-        //     original_link_indices: original_indices,
-        //     edge_types: filtered_edge_types,
-        // }
-        //
-        todo!("Implement orphan edge filtering")
+        // Pass 1 — Find blue (INDUCED_GRAPH1) nodes
+        let mut blue_nodes: HashSet<NodeId> = HashSet::new();
+        for (i, link) in merged.network.links_slice().iter().enumerate() {
+            if let Some(&et) = merged.edge_types.get(i) {
+                if et == EdgeType::InducedGraph1 {
+                    blue_nodes.insert(link.source.clone());
+                    blue_nodes.insert(link.target.clone());
+                }
+            }
+        }
+
+        // Pass 2 — Collect all edges touching blue nodes (one-hop context)
+        let mut filtered_links: Vec<Link> = Vec::new();
+        let mut filtered_edge_types: Vec<EdgeType> = Vec::new();
+        let mut original_indices: Vec<usize> = Vec::new();
+        let mut needed_nodes: HashSet<NodeId> = HashSet::new();
+
+        for (i, link) in merged.network.links_slice().iter().enumerate() {
+            if blue_nodes.contains(&link.source) || blue_nodes.contains(&link.target) {
+                filtered_links.push(link.clone());
+                if let Some(&et) = merged.edge_types.get(i) {
+                    filtered_edge_types.push(et);
+                }
+                original_indices.push(i);
+                needed_nodes.insert(link.source.clone());
+                needed_nodes.insert(link.target.clone());
+            }
+        }
+
+        // Build filtered network
+        let mut network = Network::new();
+        for link in &filtered_links {
+            network.add_link(link.clone());
+        }
+
+        // Identify context nodes (purple nodes adjacent to orphan edges)
+        let context_nodes: HashSet<NodeId> = needed_nodes
+            .iter()
+            .filter(|n| merged.node_color(n) == Some(NodeColor::Purple))
+            .cloned()
+            .collect();
+
+        OrphanFilter {
+            network,
+            context_nodes,
+            original_link_indices: original_indices,
+            edge_types: filtered_edge_types,
+        }
     }
 
     /// Whether an edge type is an orphan type.
