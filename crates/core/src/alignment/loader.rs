@@ -9,8 +9,7 @@ use crate::io::align::AlignmentMap;
 pub struct AlignmentLoader;
 
 impl AlignmentLoader {
-    pub fn parse_string(_data: &str) -> Result<AlignmentMap, ParseError> {
-        // TODO: Implement alignment file parsing (delegates to io::align).
-        todo!("Implement alignment loader")
+    pub fn parse_string(data: &str) -> Result<AlignmentMap, ParseError> {
+        crate::io::align::parse_string(data)
     }
 }
