@@ -47,6 +47,9 @@ use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeL
 use biofabric_core::layout::result::NetworkLayout;
 use biofabric_core::model::{Network, NodeId};
 use biofabric_core::worker::NoopMonitor;
+use biofabric_core::alignment::layout::{AlignmentEdgeLayout, AlignmentLayoutMode, AlignmentNodeLayout};
+use biofabric_core::alignment::merge::MergedNetwork;
+use biofabric_core::alignment::groups::NodeGroupMap;
 
 // ---------------------------------------------------------------------------
 // Test infrastructure
@@ -487,6 +490,65 @@ fn noa_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("noa").join(filename)
 }
 
+/// Path to an alignment file.
+fn align_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("align").join(filename)
+}
+
+/// Run alignment layout: merge two networks using an alignment, then lay out.
+fn run_alignment_layout(
+    g1: &Network,
+    g2: &Network,
+    align_file: &str,
+    mode: AlignmentLayoutMode,
+) -> NetworkLayout {
+    let monitor = NoopMonitor;
+
+    // Parse alignment file
+    let align_path = align_file_path(align_file);
+    assert!(
+        align_path.exists(),
+        "Alignment file not found: {}",
+        align_path.display()
+    );
+    let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
+
+    // Merge networks
+    let merged = MergedNetwork::from_alignment(g1, g2, &alignment, None, &monitor).unwrap();
+
+    // Build node groups for GROUP mode
+    let groups = NodeGroupMap::from_merged(&merged, &monitor);
+
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        link_groups: Some(
+            biofabric_core::alignment::layout::AlignmentEdgeLayout::alignment_link_group_order(),
+        ),
+        ..Default::default()
+    };
+
+    // Node layout
+    let node_layout = AlignmentNodeLayout::new(merged.clone(), mode).with_groups(groups);
+    let node_order = node_layout
+        .layout_nodes(&merged.network, &params, &monitor)
+        .unwrap();
+
+    // Edge layout
+    let has_shadows = merged.network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        merged.network.clone(),
+        node_order,
+        has_shadows,
+        LayoutMode::PerNode,
+    );
+
+    let edge_layout = AlignmentEdgeLayout::new(mode);
+    edge_layout
+        .layout_edges(&mut build_data, &params, &monitor)
+        .unwrap()
+}
+
 /// Extract a subnetwork from a loaded network using the specified node names.
 ///
 /// Filters the network to include only the named nodes and edges where
@@ -590,8 +652,25 @@ fn run_noa_test(cfg: &ParityConfig) {
         network = extract_subnetwork(&network, extract_nodes);
     }
 
-    // P11: Fixed node-order import — use imported order instead of BFS
-    let layout = if cfg.layout == "hierdag" {
+    // Alignment layout dispatch
+    let layout = if cfg.layout == "alignment" {
+        let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
+        let align_file = cfg.align_file.expect("alignment tests require align_file");
+        let g2_path = network_path(net2_file);
+        assert!(g2_path.exists(), "G2 network not found: {}", g2_path.display());
+        let g2 = load_network(&g2_path);
+
+        // Determine alignment mode from golden dirname
+        let mode = if cfg.golden_dirname.contains("orphan") {
+            AlignmentLayoutMode::Orphan
+        } else if cfg.golden_dirname.contains("cycle") {
+            AlignmentLayoutMode::Cycle
+        } else {
+            AlignmentLayoutMode::Group
+        };
+
+        run_alignment_layout(&network, &g2, align_file, mode)
+    } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
             include_shadows: true,
@@ -667,7 +746,23 @@ fn run_eda_test(cfg: &ParityConfig) {
     }
 
     // Choose the appropriate layout strategy
-    let layout = if cfg.layout == "hierdag" {
+    let layout = if cfg.layout == "alignment" {
+        let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
+        let align_file = cfg.align_file.expect("alignment tests require align_file");
+        let g2_path = network_path(net2_file);
+        assert!(g2_path.exists(), "G2 network not found: {}", g2_path.display());
+        let g2 = load_network(&g2_path);
+
+        let mode = if cfg.golden_dirname.contains("orphan") {
+            AlignmentLayoutMode::Orphan
+        } else if cfg.golden_dirname.contains("cycle") {
+            AlignmentLayoutMode::Cycle
+        } else {
+            AlignmentLayoutMode::Group
+        };
+
+        run_alignment_layout(&network, &g2, align_file, mode)
+    } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
             include_shadows: true,
