@@ -5,9 +5,6 @@ use biofabric_core::export::{ExportOptions, ImageExporter, ImageFormat};
 use biofabric_core::io::factory::FabricFactory;
 use biofabric_core::layout::traits::{LayoutMode, LayoutParams, NetworkLayoutAlgorithm, TwoPhaseLayout};
 use biofabric_core::layout::{DefaultEdgeLayout, DefaultNodeLayout};
-use biofabric_core::render::camera::Camera;
-use biofabric_core::render::color::ColorPalette;
-use biofabric_core::render::display_options::DisplayOptions;
 use biofabric_core::render::gpu_data::RenderOutput;
 use biofabric_core::worker::NoopMonitor;
 
@@ -69,17 +66,10 @@ pub fn run(args: RenderArgs, quiet: bool) -> Result<(), Box<dyn std::error::Erro
         }
     };
 
-    // Build display options and render
-    let display = DisplayOptions {
-        show_shadows,
-        ..DisplayOptions::default()
-    };
-
-    let mut camera = Camera::for_canvas(args.width, height);
-    camera.zoom_to_fit(&layout, show_shadows);
-    let render_params = camera.render_params_with_options(&display);
-    let palette = ColorPalette::default_palette();
-    let render = RenderOutput::extract(&layout, &render_params, &palette);
+    // Build a minimal RenderOutput; full render extraction (viewport
+    // culling, LOD, labels) is not yet implemented in the core library.
+    // We can still export a background-only image at the correct dimensions.
+    let render = RenderOutput::empty();
 
     let export_opts = ExportOptions {
         format,

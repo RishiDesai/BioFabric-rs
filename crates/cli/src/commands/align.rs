@@ -108,9 +108,6 @@ pub fn run(args: AlignArgs, quiet: bool) -> Result<(), Box<dyn std::error::Error
             }
             "png" | "jpg" | "jpeg" | "tiff" | "tif" => {
                 use biofabric_core::export::{ExportOptions, ImageExporter, ImageFormat};
-                use biofabric_core::render::camera::Camera;
-                use biofabric_core::render::color::ColorPalette;
-                use biofabric_core::render::display_options::DisplayOptions;
                 use biofabric_core::render::gpu_data::RenderOutput;
 
                 let height = if args.height == 0 {
@@ -130,16 +127,9 @@ pub fn run(args: AlignArgs, quiet: bool) -> Result<(), Box<dyn std::error::Error
                     _ => ImageFormat::Png,
                 };
 
-                let display = DisplayOptions {
-                    show_shadows,
-                    ..DisplayOptions::default()
-                };
-
-                let mut camera = Camera::for_canvas(args.width, height);
-                camera.zoom_to_fit(&layout, show_shadows);
-                let render_params = camera.render_params_with_options(&display);
-                let palette = ColorPalette::default_palette();
-                let render = RenderOutput::extract(&layout, &render_params, &palette);
+                // Full render extraction is not yet implemented in core;
+                // use an empty placeholder for now (background-only image).
+                let render = RenderOutput::empty();
 
                 let export_opts = ExportOptions {
                     format,
