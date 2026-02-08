@@ -82,6 +82,33 @@ impl NodeSimilarityLayout {
     pub fn clustered() -> Self {
         Self::new(SimilarityMode::Clustered)
     }
+
+    /// Set the number of improvement passes (Resort mode).
+    ///
+    /// Default: `10`. Lower values produce results faster at the cost
+    /// of potentially less-optimal ordering.
+    pub fn with_pass_count(mut self, count: usize) -> Self {
+        self.pass_count = count;
+        self
+    }
+
+    /// Set the similarity tolerance (Clustered mode).
+    ///
+    /// Default: `0.80`. Lower values allow more dissimilar nodes to be
+    /// chained together, producing larger clusters.
+    pub fn with_tolerance(mut self, tolerance: f64) -> Self {
+        self.tolerance = tolerance;
+        self
+    }
+
+    /// Set the maximum chain length (Clustered mode).
+    ///
+    /// Default: `15`. Shorter chains fragment the ordering into more
+    /// groups; longer chains allow more nodes to be placed contiguously.
+    pub fn with_chain_length(mut self, chain_length: usize) -> Self {
+        self.chain_length = chain_length;
+        self
+    }
 }
 
 impl NodeLayout for NodeSimilarityLayout {

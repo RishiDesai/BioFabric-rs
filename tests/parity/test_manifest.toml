@@ -649,6 +649,146 @@ target_mode = "breadth_order"
 compare = ["noa", "eda", "bif"]
 tags = ["sif", "layout", "controltop", "p8"]
 
+# --- triangle: ControlTop deep-variant modes ---
+
+[[test]]
+id = "sif_triangle_controltop_intra_target"
+description = "Triangle ControlTop (intra_degree, target_degree)"
+input = "triangle.sif"
+golden_dir = "triangle_controltop_intra_degree_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "intra_degree"
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+
+[[test]]
+id = "sif_triangle_controltop_median_target"
+description = "Triangle ControlTop (median_target_degree, target_degree)"
+input = "triangle.sif"
+golden_dir = "triangle_controltop_median_target_degree_target_degree"
+layout = "control_top"
+shadows = true
+control_mode = "median_target_degree"
+target_mode = "target_degree"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+
+[[test]]
+id = "sif_triangle_controltop_degree_gray"
+description = "Triangle ControlTop (degree_only, gray_code)"
+input = "triangle.sif"
+golden_dir = "triangle_controltop_degree_only_gray_code"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "gray_code"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+
+[[test]]
+id = "sif_triangle_controltop_degree_odometer"
+description = "Triangle ControlTop (degree_only, degree_odometer)"
+input = "triangle.sif"
+golden_dir = "triangle_controltop_degree_only_degree_odometer"
+layout = "control_top"
+shadows = true
+control_mode = "degree_only"
+target_mode = "degree_odometer"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+
+# ==========================================================================
+#
+#  PHASE 7b: NodeCluster deep-variants (ordering + placement)
+#
+#  Tests additional cluster ordering and placement modes.
+#  3 tests × 3 formats = 9 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_multi_relation_cluster_linksize"
+description = "Multi-relation NodeCluster (LinkSize ordering, Between placement)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_cluster_linksize_between"
+layout = "node_cluster"
+shadows = true
+attribute_file = "multi_relation_clusters.na"
+cluster_order = "link_size"
+cluster_placement = "between"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+
+[[test]]
+id = "sif_multi_relation_cluster_nodesize"
+description = "Multi-relation NodeCluster (NodeSize ordering, Between placement)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_cluster_nodesize_between"
+layout = "node_cluster"
+shadows = true
+attribute_file = "multi_relation_clusters.na"
+cluster_order = "node_size"
+cluster_placement = "between"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+
+[[test]]
+id = "sif_multi_relation_cluster_inline"
+description = "Multi-relation NodeCluster (Name ordering, Inline placement)"
+input = "multi_relation.sif"
+golden_dir = "multi_relation_cluster_name_inline"
+layout = "node_cluster"
+shadows = true
+attribute_file = "multi_relation_clusters.na"
+cluster_order = "name"
+cluster_placement = "inline"
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+
+# ==========================================================================
+#
+#  PHASE 5c: NodeSimilarity deep-variants (custom parameters)
+#
+#  Tests non-default similarity algorithm parameters.
+#  3 tests × 3 formats = 9 test functions
+#
+# ==========================================================================
+
+[[test]]
+id = "sif_triangle_similarity_resort_5pass"
+description = "Triangle with NodeSimilarity resort (pass_count=5)"
+input = "triangle.sif"
+golden_dir = "triangle_similarity_resort_5pass"
+layout = "similarity_resort"
+shadows = true
+similarity_pass_count = 5
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+
+[[test]]
+id = "sif_triangle_similarity_clustered_tol50"
+description = "Triangle with NodeSimilarity clustered (tolerance=0.50)"
+input = "triangle.sif"
+golden_dir = "triangle_similarity_clustered_tol50"
+layout = "similarity_clustered"
+shadows = true
+similarity_tolerance = 0.50
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+
+[[test]]
+id = "sif_triangle_similarity_clustered_chain5"
+description = "Triangle with NodeSimilarity clustered (chain_length=5)"
+input = "triangle.sif"
+golden_dir = "triangle_similarity_clustered_chain5"
+layout = "similarity_clustered"
+shadows = true
+similarity_chain_length = 5
+compare = ["noa", "eda", "bif"]
+tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+
 # ==========================================================================
 #
 #  PHASE 9: SetLayout

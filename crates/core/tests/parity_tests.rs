@@ -183,6 +183,12 @@ struct ParityConfig {
     control_nodes: Option<&'static [&'static str]>, // ControlTop fixed list
     link_means: Option<&'static str>,   // SetLayout: "belongs_to" or "contains"
     attribute_file: Option<&'static str>, // NodeCluster: .na file
+    cluster_order: Option<&'static str>, // NodeCluster: "link_size", "node_size", "name"
+    cluster_placement: Option<&'static str>, // NodeCluster: "inline", "between"
+    // NodeSimilarity custom parameters
+    similarity_pass_count: Option<usize>,
+    similarity_tolerance: Option<f64>,
+    similarity_chain_length: Option<usize>,
     // Fixed-order import (Phase B)
     noa_file: Option<&'static str>,
     eda_file: Option<&'static str>,
@@ -330,6 +336,49 @@ fn run_similarity_layout(network: &Network, mode: SimilarityMode) -> NetworkLayo
         .unwrap()
 }
 
+/// Run a similarity layout with custom parameters.
+fn run_similarity_layout_custom(
+    network: &Network,
+    mode: SimilarityMode,
+    pass_count: Option<usize>,
+    tolerance: Option<f64>,
+    chain_length: Option<usize>,
+) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    let mut similarity_layout = NodeSimilarityLayout::new(mode);
+    if let Some(pc) = pass_count {
+        similarity_layout = similarity_layout.with_pass_count(pc);
+    }
+    if let Some(tol) = tolerance {
+        similarity_layout = similarity_layout.with_tolerance(tol);
+    }
+    if let Some(cl) = chain_length {
+        similarity_layout = similarity_layout.with_chain_length(cl);
+    }
+    let node_order = similarity_layout
+        .layout_nodes(network, &params, &monitor)
+        .unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout
+        .layout_edges(&mut build_data, &params, &monitor)
+        .unwrap()
+}
+
 /// Run HierDAG layout and get the NetworkLayout.
 fn run_hierdag_layout(network: &Network, params: &LayoutParams) -> NetworkLayout {
     let monitor = NoopMonitor;
@@ -417,6 +466,21 @@ fn run_control_top_layout(
 
 /// Run the NodeCluster layout.
 fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLayout {
+    run_node_cluster_layout_with_params(
+        network,
+        attribute_file,
+        ClusterOrder::Name,
+        InterClusterPlacement::Between,
+    )
+}
+
+/// Run the NodeCluster layout with explicit ordering and placement modes.
+fn run_node_cluster_layout_with_params(
+    network: &Network,
+    attribute_file: &str,
+    order: ClusterOrder,
+    placement: InterClusterPlacement,
+) -> NetworkLayout {
     let monitor = NoopMonitor;
     let params = LayoutParams {
         include_shadows: true,
@@ -442,8 +506,8 @@ fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLa
     }
 
     let node_layout = NodeClusterLayout::new(assignments.clone())
-        .with_order(ClusterOrder::Name)
-        .with_inter_cluster(InterClusterPlacement::Between);
+        .with_order(order)
+        .with_inter_cluster(placement);
 
     let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
 
@@ -457,8 +521,8 @@ fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLa
 
     let edge_layout = NodeClusterEdgeLayout {
         params: biofabric_core::layout::cluster::ClusterLayoutParams {
-            cluster_order: ClusterOrder::Name,
-            inter_cluster: InterClusterPlacement::Between,
+            cluster_order: order,
+            inter_cluster: placement,
         },
         assignments,
     };
@@ -1328,20 +1392,13 @@ fn run_noa_test(cfg: &ParityConfig) {
         // P10: WorldBank layout
         run_world_bank_layout(&network)
     } else if cfg.layout == "control_top" {
-        let ctrl_mode = match cfg.control_mode {
-            Some("degree_only") => ControlOrder::DegreeOnly,
-            Some("partial_order") => ControlOrder::PartialOrder,
-            Some("fixed_list") => ControlOrder::FixedList,
-            _ => ControlOrder::DegreeOnly,
-        };
-        let targ_mode = match cfg.target_mode {
-            Some("target_degree") => TargetOrder::TargetDegree,
-            Some("breadth_order") => TargetOrder::BreadthOrder,
-            _ => TargetOrder::TargetDegree,
-        };
+        let ctrl_mode = parse_control_order(cfg.control_mode);
+        let targ_mode = parse_target_order(cfg.target_mode);
         run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
     } else if cfg.layout == "node_cluster" {
-        run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
+        let order = parse_cluster_order(cfg.cluster_order);
+        let placement = parse_cluster_placement(cfg.cluster_placement);
+        run_node_cluster_layout_with_params(&network, cfg.attribute_file.unwrap(), order, placement)
     } else if let Some(noa_file) = cfg.noa_file {
         let noa_path = noa_file_path(noa_file);
         assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
@@ -1349,6 +1406,14 @@ fn run_noa_test(cfg: &ParityConfig) {
         run_layout_with_node_order(&network, node_order)
     } else {
         match cfg.layout {
+            "similarity_resort" if cfg.has_custom_similarity() => {
+                run_similarity_layout_custom(&network, SimilarityMode::Resort,
+                    cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length)
+            }
+            "similarity_clustered" if cfg.has_custom_similarity() => {
+                run_similarity_layout_custom(&network, SimilarityMode::Clustered,
+                    cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length)
+            }
             "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
             "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
             _ => {
@@ -1420,20 +1485,13 @@ fn run_eda_test(cfg: &ParityConfig) {
         // P10: WorldBank layout
         run_world_bank_layout(&network)
     } else if cfg.layout == "control_top" {
-        let ctrl_mode = match cfg.control_mode {
-            Some("degree_only") => ControlOrder::DegreeOnly,
-            Some("partial_order") => ControlOrder::PartialOrder,
-            Some("fixed_list") => ControlOrder::FixedList,
-            _ => ControlOrder::DegreeOnly,
-        };
-        let targ_mode = match cfg.target_mode {
-            Some("target_degree") => TargetOrder::TargetDegree,
-            Some("breadth_order") => TargetOrder::BreadthOrder,
-            _ => TargetOrder::TargetDegree,
-        };
+        let ctrl_mode = parse_control_order(cfg.control_mode);
+        let targ_mode = parse_target_order(cfg.target_mode);
         run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
     } else if cfg.layout == "node_cluster" {
-        run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
+        let order = parse_cluster_order(cfg.cluster_order);
+        let placement = parse_cluster_placement(cfg.cluster_placement);
+        run_node_cluster_layout_with_params(&network, cfg.attribute_file.unwrap(), order, placement)
     } else if let Some(noa_file) = cfg.noa_file {
         // P11: Fixed node-order import
         let noa_path = noa_file_path(noa_file);
@@ -1451,6 +1509,14 @@ fn run_eda_test(cfg: &ParityConfig) {
         run_layout_with_groups(&network, &groups, mode)
     } else {
         match cfg.layout {
+            "similarity_resort" if cfg.has_custom_similarity() => {
+                run_similarity_layout_custom(&network, SimilarityMode::Resort,
+                    cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length)
+            }
+            "similarity_clustered" if cfg.has_custom_similarity() => {
+                run_similarity_layout_custom(&network, SimilarityMode::Clustered,
+                    cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length)
+            }
             "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
             "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
             _ => run_default_layout(&network),
@@ -1526,24 +1592,17 @@ fn run_bif_test(cfg: &ParityConfig) {
         } else if cfg.layout == "world_bank" {
             (run_world_bank_layout(&network), network)
         } else if cfg.layout == "control_top" {
-            let ctrl_mode = match cfg.control_mode {
-                Some("degree_only") => ControlOrder::DegreeOnly,
-                Some("partial_order") => ControlOrder::PartialOrder,
-                Some("fixed_list") => ControlOrder::FixedList,
-                _ => ControlOrder::DegreeOnly,
-            };
-            let targ_mode = match cfg.target_mode {
-                Some("target_degree") => TargetOrder::TargetDegree,
-                Some("breadth_order") => TargetOrder::BreadthOrder,
-                _ => TargetOrder::TargetDegree,
-            };
+            let ctrl_mode = parse_control_order(cfg.control_mode);
+            let targ_mode = parse_target_order(cfg.target_mode);
             (
                 run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes),
                 network,
             )
         } else if cfg.layout == "node_cluster" {
+            let order = parse_cluster_order(cfg.cluster_order);
+            let placement = parse_cluster_placement(cfg.cluster_placement);
             (
-                run_node_cluster_layout(&network, cfg.attribute_file.unwrap()),
+                run_node_cluster_layout_with_params(&network, cfg.attribute_file.unwrap(), order, placement),
                 network,
             )
         } else if let Some(noa_file) = cfg.noa_file {
@@ -1566,6 +1625,14 @@ fn run_bif_test(cfg: &ParityConfig) {
             (run_layout_with_groups(&network, &groups, mode), network)
         } else {
             match cfg.layout {
+                "similarity_resort" if cfg.has_custom_similarity() => {
+                    (run_similarity_layout_custom(&network, SimilarityMode::Resort,
+                        cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length), network)
+                }
+                "similarity_clustered" if cfg.has_custom_similarity() => {
+                    (run_similarity_layout_custom(&network, SimilarityMode::Clustered,
+                        cfg.similarity_pass_count, cfg.similarity_tolerance, cfg.similarity_chain_length), network)
+                }
                 "similarity_resort" => (run_similarity_layout(&network, SimilarityMode::Resort), network),
                 "similarity_clustered" => {
                     (run_similarity_layout(&network, SimilarityMode::Clustered), network)
@@ -1612,6 +1679,57 @@ fn run_bif_test(cfg: &ParityConfig) {
 
 /// Create a default ParityConfig (all extended fields set to None/defaults).
 #[allow(dead_code)]
+// ---------------------------------------------------------------------------
+// Enum parsing helpers for deep-variant config strings
+// ---------------------------------------------------------------------------
+
+fn parse_control_order(mode: Option<&str>) -> ControlOrder {
+    match mode {
+        Some("degree_only") => ControlOrder::DegreeOnly,
+        Some("partial_order") => ControlOrder::PartialOrder,
+        Some("fixed_list") => ControlOrder::FixedList,
+        Some("intra_degree") => ControlOrder::IntraDegree,
+        Some("median_target_degree") => ControlOrder::MedianTargetDegree,
+        _ => ControlOrder::DegreeOnly,
+    }
+}
+
+fn parse_target_order(mode: Option<&str>) -> TargetOrder {
+    match mode {
+        Some("target_degree") => TargetOrder::TargetDegree,
+        Some("breadth_order") => TargetOrder::BreadthOrder,
+        Some("gray_code") => TargetOrder::GrayCode,
+        Some("degree_odometer") => TargetOrder::DegreeOdometer,
+        _ => TargetOrder::TargetDegree,
+    }
+}
+
+fn parse_cluster_order(order: Option<&str>) -> ClusterOrder {
+    match order {
+        Some("link_size") => ClusterOrder::LinkSize,
+        Some("node_size") => ClusterOrder::NodeSize,
+        Some("name") => ClusterOrder::Name,
+        Some("breadth_first") => ClusterOrder::BreadthFirst,
+        _ => ClusterOrder::Name, // default for backward compat
+    }
+}
+
+fn parse_cluster_placement(placement: Option<&str>) -> InterClusterPlacement {
+    match placement {
+        Some("inline") => InterClusterPlacement::Inline,
+        Some("between") => InterClusterPlacement::Between,
+        _ => InterClusterPlacement::Between, // default for backward compat
+    }
+}
+
+impl ParityConfig {
+    fn has_custom_similarity(&self) -> bool {
+        self.similarity_pass_count.is_some()
+            || self.similarity_tolerance.is_some()
+            || self.similarity_chain_length.is_some()
+    }
+}
+
 fn default_config(input: &'static str, golden: &'static str) -> ParityConfig {
     ParityConfig {
         input_file: input,
@@ -1627,6 +1745,11 @@ fn default_config(input: &'static str, golden: &'static str) -> ParityConfig {
         control_nodes: None,
         link_means: None,
         attribute_file: None,
+        cluster_order: None,
+        cluster_placement: None,
+        similarity_pass_count: None,
+        similarity_tolerance: None,
+        similarity_chain_length: None,
         noa_file: None,
         eda_file: None,
         extract_nodes: None,
@@ -1854,6 +1977,92 @@ macro_rules! parity_test_cluster {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "node_cluster";
                 cfg.attribute_file = Some($attr);
+                run_bif_test(&cfg);
+            }
+        }
+    };
+    // Variant with explicit ordering and placement modes
+    (
+        name: $name:ident,
+        input: $input:expr,
+        golden: $golden:expr,
+        attribute_file: $attr:expr,
+        cluster_order: $co:expr,
+        cluster_placement: $cp:expr
+    ) => {
+        paste::paste! {
+            #[test]
+            fn [<$name _noa>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = "node_cluster";
+                cfg.attribute_file = Some($attr);
+                cfg.cluster_order = Some($co);
+                cfg.cluster_placement = Some($cp);
+                run_noa_test(&cfg);
+            }
+
+            #[test]
+            fn [<$name _eda>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = "node_cluster";
+                cfg.attribute_file = Some($attr);
+                cfg.cluster_order = Some($co);
+                cfg.cluster_placement = Some($cp);
+                run_eda_test(&cfg);
+            }
+
+            #[test]
+            fn [<$name _bif>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = "node_cluster";
+                cfg.attribute_file = Some($attr);
+                cfg.cluster_order = Some($co);
+                cfg.cluster_placement = Some($cp);
+                run_bif_test(&cfg);
+            }
+        }
+    };
+}
+
+/// Generate three test functions for NodeSimilarity layout with custom parameters.
+macro_rules! parity_test_similarity_custom {
+    (
+        name: $name:ident,
+        input: $input:expr,
+        golden: $golden:expr,
+        layout: $layout:expr
+        $(, pass_count: $pc:expr)?
+        $(, tolerance: $tol:expr)?
+        $(, chain_length: $cl:expr)?
+    ) => {
+        paste::paste! {
+            #[test]
+            fn [<$name _noa>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = $layout;
+                $(cfg.similarity_pass_count = Some($pc);)?
+                $(cfg.similarity_tolerance = Some($tol);)?
+                $(cfg.similarity_chain_length = Some($cl);)?
+                run_noa_test(&cfg);
+            }
+
+            #[test]
+            fn [<$name _eda>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = $layout;
+                $(cfg.similarity_pass_count = Some($pc);)?
+                $(cfg.similarity_tolerance = Some($tol);)?
+                $(cfg.similarity_chain_length = Some($cl);)?
+                run_eda_test(&cfg);
+            }
+
+            #[test]
+            fn [<$name _bif>]() {
+                let mut cfg = default_config($input, $golden);
+                cfg.layout = $layout;
+                $(cfg.similarity_pass_count = Some($pc);)?
+                $(cfg.similarity_tolerance = Some($tol);)?
+                $(cfg.similarity_chain_length = Some($cl);)?
                 run_bif_test(&cfg);
             }
         }
@@ -2312,6 +2521,11 @@ fn generate_goldens() {
     let controltop_cases: Vec<(&str, &str, &str, &str, Option<&[&str]>)> = vec![
         ("multi_relation.sif", "multi_relation_controltop_degree_only_target_degree",  "degree_only", "target_degree", None),
         ("multi_relation.sif", "multi_relation_controltop_degree_only_breadth_order",  "degree_only", "breadth_order", None),
+        // Deep-variant modes
+        ("triangle.sif", "triangle_controltop_intra_degree_target_degree",            "intra_degree",         "target_degree",   None),
+        ("triangle.sif", "triangle_controltop_median_target_degree_target_degree",    "median_target_degree", "target_degree",   None),
+        ("triangle.sif", "triangle_controltop_degree_only_gray_code",                "degree_only",          "gray_code",       None),
+        ("triangle.sif", "triangle_controltop_degree_only_degree_odometer",          "degree_only",          "degree_odometer", None),
     ];
 
     for (input_file, golden_dirname, ctrl_mode_str, targ_mode_str, ctrl_nodes) in &controltop_cases {
@@ -2332,17 +2546,8 @@ fn generate_goldens() {
         eprintln!("Generating golden (controltop): {} -> {}", input_file, golden_dirname);
 
         let network = load_network(&input_path);
-        let ctrl_mode = match *ctrl_mode_str {
-            "degree_only" => ControlOrder::DegreeOnly,
-            "partial_order" => ControlOrder::PartialOrder,
-            "fixed_list" => ControlOrder::FixedList,
-            _ => ControlOrder::DegreeOnly,
-        };
-        let targ_mode = match *targ_mode_str {
-            "target_degree" => TargetOrder::TargetDegree,
-            "breadth_order" => TargetOrder::BreadthOrder,
-            _ => TargetOrder::TargetDegree,
-        };
+        let ctrl_mode = parse_control_order(Some(ctrl_mode_str));
+        let targ_mode = parse_target_order(Some(targ_mode_str));
         let layout = run_control_top_layout(&network, ctrl_mode, targ_mode, *ctrl_nodes);
 
         let noa_content = format_noa(&layout);
@@ -2902,6 +3107,12 @@ parity_test_layout! { name: sif_multi_relation_similarity_resort,  input: "multi
 parity_test_layout! { name: sif_triangle_similarity_clustered,        input: "triangle.sif",       golden: "triangle_similarity_clustered",       layout: "similarity_clustered" }
 parity_test_layout! { name: sif_multi_relation_similarity_clustered,  input: "multi_relation.sif", golden: "multi_relation_similarity_clustered",  layout: "similarity_clustered" }
 
+// --- NodeSimilarity deep-variants: custom parameters ---
+
+parity_test_similarity_custom! { name: sif_triangle_similarity_resort_5pass,       input: "triangle.sif", golden: "triangle_similarity_resort_5pass",       layout: "similarity_resort",    pass_count: 5 }
+parity_test_similarity_custom! { name: sif_triangle_similarity_clustered_tol50,    input: "triangle.sif", golden: "triangle_similarity_clustered_tol50",    layout: "similarity_clustered", tolerance: 0.50 }
+parity_test_similarity_custom! { name: sif_triangle_similarity_clustered_chain5,   input: "triangle.sif", golden: "triangle_similarity_clustered_chain5",   layout: "similarity_clustered", chain_length: 5 }
+
 // ===========================================================================
 //
 //  PHASE 6: HierDAG layout
@@ -2927,11 +3138,17 @@ parity_test_hierdag! { name: sif_dag_deep_hierdag_down,     input: "dag_deep.sif
 
 parity_test_cluster! { name: sif_multi_relation_node_cluster, input: "multi_relation.sif", golden: "multi_relation_node_cluster", attribute_file: "multi_relation_clusters.na" }
 
+// --- NodeCluster deep-variants: ordering + placement ---
+
+parity_test_cluster! { name: sif_multi_relation_cluster_linksize,  input: "multi_relation.sif", golden: "multi_relation_cluster_linksize_between",  attribute_file: "multi_relation_clusters.na", cluster_order: "link_size",  cluster_placement: "between" }
+parity_test_cluster! { name: sif_multi_relation_cluster_nodesize,  input: "multi_relation.sif", golden: "multi_relation_cluster_nodesize_between",  attribute_file: "multi_relation_clusters.na", cluster_order: "node_size",  cluster_placement: "between" }
+parity_test_cluster! { name: sif_multi_relation_cluster_inline,    input: "multi_relation.sif", golden: "multi_relation_cluster_name_inline",       attribute_file: "multi_relation_clusters.na", cluster_order: "name",       cluster_placement: "inline" }
+
 // ===========================================================================
 //
 //  PHASE 8: ControlTop layout
 //
-//  4 tests × 3 formats = 12 test functions
+//  8 tests × 3 formats = 24 test functions
 //
 // ===========================================================================
 
@@ -2944,6 +3161,13 @@ parity_test_controltop! { name: sif_multi_relation_controltop_fixed_breadth, inp
 
 parity_test_controltop! { name: sif_multi_relation_controltop_degree_target,  input: "multi_relation.sif", golden: "multi_relation_controltop_degree_only_target_degree",  ctrl_mode: "degree_only", targ_mode: "target_degree" }
 parity_test_controltop! { name: sif_multi_relation_controltop_degree_breadth, input: "multi_relation.sif", golden: "multi_relation_controltop_degree_only_breadth_order",  ctrl_mode: "degree_only", targ_mode: "breadth_order" }
+
+// --- triangle: ControlTop deep-variant modes ---
+
+parity_test_controltop! { name: sif_triangle_controltop_intra_target,    input: "triangle.sif", golden: "triangle_controltop_intra_degree_target_degree",            ctrl_mode: "intra_degree",         targ_mode: "target_degree" }
+parity_test_controltop! { name: sif_triangle_controltop_median_target,   input: "triangle.sif", golden: "triangle_controltop_median_target_degree_target_degree",    ctrl_mode: "median_target_degree", targ_mode: "target_degree" }
+parity_test_controltop! { name: sif_triangle_controltop_degree_gray,     input: "triangle.sif", golden: "triangle_controltop_degree_only_gray_code",                ctrl_mode: "degree_only",          targ_mode: "gray_code" }
+parity_test_controltop! { name: sif_triangle_controltop_degree_odometer, input: "triangle.sif", golden: "triangle_controltop_degree_only_degree_odometer",          ctrl_mode: "degree_only",          targ_mode: "degree_odometer" }
 
 // ===========================================================================
 //

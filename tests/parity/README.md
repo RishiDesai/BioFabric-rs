@@ -22,6 +22,7 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 `.scores` (alignment scoring metrics, when applicable).
 
 **Rust tests**: `cargo test --test parity_tests --test analysis_tests -- --include-ignored`
+**Image tests**: `cargo test --test image_export_tests --features png_export`
 
 ## Output formats being compared
 
@@ -32,7 +33,7 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | `output.bif` | Full XML session | Everything: colors, drain zones, columns, annotations, plugin data |
 | `output.scores` | `metric\tvalue` (tab-separated) | Alignment scoring metrics (EC, S3, ICS, NC, NGS, LGS, JS) |
 
-## Test suite overview (380 test functions)
+## Test suite overview (419 test functions)
 
 | Phase | What | Tests | Functions |
 |-------|------|-------|-----------|
@@ -42,9 +43,12 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | P4 | XML round-trip | 7 | 7 |
 | P5 | NodeSimilarity layout (resort mode) | 2 | 6 |
 | P5b | NodeSimilarity layout (clustered mode) | 2 | 6 |
+| P5c | NodeSimilarity deep-variants (custom params) | 3 | 9 |
 | P6 | HierDAG layout (pointUp true/false) | 6 | 18 |
 | P7 | NodeCluster layout | 1 | 3 |
+| P7b | NodeCluster deep-variants (ordering + placement) | 3 | 9 |
 | P8 | ControlTop layout (4 mode combos) | 4 | 12 |
+| P8b | ControlTop deep-variants (4 additional mode combos) | 4 | 12 |
 | P9 | SetLayout (BELONGS_TO + CONTAINS) | 2 | 6 |
 | P10 | WorldBank layout | 0 | 0 |
 | P11 | Fixed-order import (NOA/EDA input) | 3 | 9 |
@@ -64,7 +68,8 @@ and runs each test case through the layout pipeline. Outputs are `.noa`
 | — | Analysis: node degree | — | 8 |
 | — | Analysis: first-neighbor expansion | — | 5 |
 | — | Analysis: alignment scoring (all 7 metrics × 11 scenarios) | — | 77 |
-| **Total** | | **119 manifest + 117 analysis** | **263 parity + 117 analysis = 380** |
+| — | Image export (PNG/JPEG/TIFF dimension tests) | — | 9 |
+| **Total** | | **129 manifest + 117 analysis + 9 image** | **293 parity + 117 analysis + 9 image = 419** |
 
 Each parity test generates **three** independent test functions (NOA, EDA,
 BIF) so agents can make incremental progress — get parsing right first (NOA
@@ -266,14 +271,15 @@ For each node in row order:
 
 ## Remaining test surface
 
-Features not yet covered by parity tests (~24 tests / ~60 functions):
+Features not yet covered by parity tests (~11 tests / ~27 functions):
 
 | Category | Est. tests | Notes |
 |----------|-----------|-------|
-| Image export (PNG/JPEG/TIFF) | ~6 | Pixel-level comparison; Java AWT may produce platform-dependent output. Needs tolerance-based comparison. |
+| Image export pixel rasterization | ~3 | CPU rasterization of network content (links, nodes, annotations). Current tests validate dimensions only. |
 | Alignment sub-features | ~4 | Cycle detection in `.align` file mappings; orphan edge filtering as a standalone analysis op. |
 | DefaultLayout custom start nodes | ~3 | `DefaultParams.startNodes` override; needs `--start-nodes` flag in GoldenGenerator. |
-| Algorithm parameter deep-variants | ~15 | ControlTop: `CTRL_INTRA_DEGREE_ONLY`, `CTRL_MEDIAN_TARGET_DEGREE`, `GRAY_CODE`, `NODE_DEGREE_ODOMETER_SOURCE`. NodeCluster: ordering (`LINK_SIZE`/`NODE_SIZE`/`NAME`), placement (`INLINE`/`BETWEEN`). NodeSimilarity: custom pass count, cosine distance, chain length, tolerance. SetLayout: `BOTH_IN_SET`. |
+| SetLayout BOTH_IN_SET | ~1 | `SetSemantics::BothInSet` not yet implemented in Rust. |
+| NodeSimilarity cosine distance | ~1 | Cosine distance metric not yet implemented (only Jaccard). |
 | Populated annotations | ~0 | Covered by P16b: DesaiEtAl BIF round-trip files contain populated `<nodeAnnotations>`, `<linkAnnotations>`, and `<shadowLinkAnnotations>`. |
 | GZIP session handling | ~2 | Loading/saving `.bif.gz` compressed sessions. |
 
@@ -363,6 +369,20 @@ cargo test --test analysis_tests -- --include-ignored align_score  # Alignment s
 # By input format
 cargo test --test parity_tests -- --include-ignored sif_
 cargo test --test parity_tests -- --include-ignored gw_
+
+# Deep-variant tests
+cargo test --test parity_tests -- --include-ignored deep_variant   # future tag
+cargo test --test parity_tests -- --include-ignored cluster_linksize
+cargo test --test parity_tests -- --include-ignored controltop_intra
+cargo test --test parity_tests -- --include-ignored controltop_median
+cargo test --test parity_tests -- --include-ignored controltop_degree_gray
+cargo test --test parity_tests -- --include-ignored controltop_degree_odometer
+cargo test --test parity_tests -- --include-ignored resort_5pass
+cargo test --test parity_tests -- --include-ignored clustered_tol50
+cargo test --test parity_tests -- --include-ignored clustered_chain5
+
+# Image export tests (requires png_export feature)
+cargo test --test image_export_tests --features png_export
 ```
 
 ## Implementation priority

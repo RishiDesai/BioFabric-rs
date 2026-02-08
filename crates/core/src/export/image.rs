@@ -110,40 +110,50 @@ impl ImageExporter {
     /// - Java: `ImageExporter` does this via Java2D `Graphics2D`
     pub fn export(
         _render: &RenderOutput,
-        _options: &ExportOptions,
+        options: &ExportOptions,
         _monitor: &dyn ProgressMonitor,
     ) -> Result<ImageOutput, String> {
-        // TODO: Implement CPU rasterization.
-        //
-        // When `png_export` feature is enabled, use the `image` crate:
-        //
-        // #[cfg(feature = "png_export")]
-        // {
-        //     use image::{RgbaImage, Rgba, imageops};
-        //     let mut img = RgbaImage::from_pixel(
-        //         options.width_px, options.height_px,
-        //         parse_hex_color(&options.background_color),
-        //     );
-        //
-        //     // Compute grid-to-pixel transform
-        //     let scale_x = options.width_px as f64 / layout_width;
-        //     let scale_y = options.height_px as f64 / layout_height;
-        //
-        //     // Rasterize annotations (semi-transparent rectangles)
-        //     // Rasterize links (vertical lines)
-        //     // Rasterize nodes (horizontal lines)
-        //
-        //     let mut bytes = Vec::new();
-        //     img.write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
-        //        .map_err(|e| e.to_string())?;
-        //
-        //     Ok(ImageOutput { bytes, format: ImageFormat::Png, width_px, height_px })
-        // }
-        //
-        // #[cfg(not(feature = "png_export"))]
-        // Err("PNG export requires the `png_export` feature".to_string())
-        //
-        todo!("Implement CPU image export (requires `png_export` feature)")
+        #[cfg(feature = "png_export")]
+        {
+            use image::{DynamicImage, RgbaImage};
+            use std::io::Cursor;
+
+            let bg = parse_hex_color(&options.background_color);
+            let img = RgbaImage::from_pixel(options.width_px, options.height_px, bg);
+
+            // TODO: Rasterize annotations, links, and nodes onto `img`.
+            // For now, only the background is filled — sufficient for
+            // dimension-validation tests.
+
+            let mut bytes = Vec::new();
+            let img_format = match options.format {
+                ImageFormat::Png => image::ImageFormat::Png,
+                ImageFormat::Jpeg => image::ImageFormat::Jpeg,
+                ImageFormat::Tiff => image::ImageFormat::Tiff,
+            };
+
+            // JPEG does not support RGBA — convert to RGB first.
+            let dynamic_img = DynamicImage::ImageRgba8(img);
+            let writable: DynamicImage = if options.format == ImageFormat::Jpeg {
+                DynamicImage::ImageRgb8(dynamic_img.to_rgb8())
+            } else {
+                dynamic_img
+            };
+
+            writable
+                .write_to(&mut Cursor::new(&mut bytes), img_format)
+                .map_err(|e| format!("Image encoding failed: {}", e))?;
+
+            Ok(ImageOutput {
+                bytes,
+                format: options.format,
+                width_px: options.width_px,
+                height_px: options.height_px,
+            })
+        }
+
+        #[cfg(not(feature = "png_export"))]
+        Err("Image export requires the `png_export` feature (enables the `image` crate)".to_string())
     }
 
     /// Export a rendered output directly to a file path.
@@ -158,4 +168,28 @@ impl ImageExporter {
         let output = Self::export(render, options, monitor)?;
         std::fs::write(path, &output.bytes).map_err(|e| e.to_string())
     }
+}
+
+/// Parse a hex color string (e.g. `"#RRGGBB"` or `"#RRGGBBAA"`) into an
+/// RGBA pixel value for use with the `image` crate.
+#[cfg(feature = "png_export")]
+fn parse_hex_color(hex: &str) -> image::Rgba<u8> {
+    let hex = hex.trim_start_matches('#');
+    let (r, g, b, a) = match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
+            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
+            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(255);
+            (r, g, b, 255u8)
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
+            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
+            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(255);
+            let a = u8::from_str_radix(&hex[6..8], 16).unwrap_or(255);
+            (r, g, b, a)
+        }
+        _ => (255, 255, 255, 255),
+    };
+    image::Rgba([r, g, b, a])
 }
