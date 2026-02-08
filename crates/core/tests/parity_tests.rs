@@ -41,6 +41,7 @@ use biofabric_core::layout::cluster::{
 use biofabric_core::layout::control_top::{ControlOrder, ControlTopLayout, TargetOrder};
 use biofabric_core::layout::default::{DefaultEdgeLayout, DefaultNodeLayout};
 use biofabric_core::layout::hierarchy::HierDAGLayout;
+use biofabric_core::layout::similarity::{NodeSimilarityLayout, SimilarityMode};
 use biofabric_core::layout::world_bank::WorldBankLayout;
 use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeLayout};
 use biofabric_core::layout::result::NetworkLayout;
@@ -289,6 +290,38 @@ fn run_layout_with_groups(
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
 
+/// Run a similarity layout (resort or clustered mode).
+///
+/// 1. Runs the NodeSimilarityLayout to get the refined node order
+/// 2. Builds LayoutBuildData with the refined order
+/// 3. Runs DefaultEdgeLayout and returns NetworkLayout
+fn run_similarity_layout(network: &Network, mode: SimilarityMode) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    let similarity_layout = NodeSimilarityLayout::new(mode);
+    let node_order = similarity_layout
+        .layout_nodes(network, &params, &monitor)
+        .unwrap();
+
+    let has_shadows = network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        network.clone(),
+        node_order,
+        has_shadows,
+        params.layout_mode,
+    );
+
+    let edge_layout = DefaultEdgeLayout::new();
+    edge_layout
+        .layout_edges(&mut build_data, &params, &monitor)
+        .unwrap()
+}
+
 /// Run HierDAG layout and get the NetworkLayout.
 fn run_hierdag_layout(network: &Network, params: &LayoutParams) -> NetworkLayout {
     let monitor = NoopMonitor;
@@ -418,7 +451,6 @@ fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLa
     };
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
 }
-
 
 /// Parse a NOA-format file ("Node Row" header, "name = row" lines).
 ///
@@ -592,8 +624,14 @@ fn run_noa_test(cfg: &ParityConfig) {
         let node_order = parse_noa_format_file(&noa_path);
         run_layout_with_node_order(&network, node_order)
     } else {
-        // P3 (link grouping) does NOT change node order — default BFS
-        run_default_layout(&network)
+        match cfg.layout {
+            "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
+            "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
+            _ => {
+                // P3 (link grouping) does NOT change node order — default BFS
+                run_default_layout(&network)
+            }
+        }
     };
 
     let actual_noa = format_noa(&layout);
@@ -672,7 +710,11 @@ fn run_eda_test(cfg: &ParityConfig) {
         let groups: Vec<String> = link_groups.iter().map(|s| s.to_string()).collect();
         run_layout_with_groups(&network, &groups, mode)
     } else {
-        run_default_layout(&network)
+        match cfg.layout {
+            "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
+            "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
+            _ => run_default_layout(&network),
+        }
     };
 
     // For shadows-on tests, export the full EDA (including shadow links).
@@ -1598,6 +1640,56 @@ fn generate_goldens() {
         let network = load_network(&input_path);
         let node_order = parse_noa_format_file(&noa_input);
         let layout = run_layout_with_node_order(&network, node_order);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- P5: Similarity layout (resort + clustered, 8 variants) ----
+    let similarity_cases: Vec<(&str, &str, &str, SimilarityMode)> = vec![
+        // Resort mode
+        ("triangle.sif",       "triangle_similarity_resort",       "sif", SimilarityMode::Resort),
+        ("multi_relation.sif", "multi_relation_similarity_resort",  "sif", SimilarityMode::Resort),
+        ("ba2K.sif",           "ba2K_similarity_resort",            "sif", SimilarityMode::Resort),
+        ("yeast.gw",           "yeast_gw_similarity_resort",        "gw",  SimilarityMode::Resort),
+        // Clustered mode
+        ("triangle.sif",       "triangle_similarity_clustered",       "sif", SimilarityMode::Clustered),
+        ("multi_relation.sif", "multi_relation_similarity_clustered",  "sif", SimilarityMode::Clustered),
+        ("ba2K.sif",           "ba2K_similarity_clustered",            "sif", SimilarityMode::Clustered),
+        ("yeast.gw",           "yeast_gw_similarity_clustered",        "gw",  SimilarityMode::Clustered),
+    ];
+
+    for (input_file, golden_dirname, _ext, mode) in &similarity_cases {
+        let input_path = network_path(input_file);
+        if !input_path.exists() {
+            eprintln!("SKIP: input file not found: {}", input_path.display());
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (similarity): {} -> {}", input_file, golden_dirname);
+
+        let network = load_network(&input_path);
+        let layout = run_similarity_layout(&network, *mode);
 
         let noa_content = format_noa(&layout);
         let eda_content = format_eda(&layout);
