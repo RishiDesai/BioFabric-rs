@@ -378,8 +378,10 @@ fn write_nodes<W: Write>(
     for (id, nl) in &nodes {
         // Use original NID from loaded BIF if available, otherwise compute from position
         let nid = nl.nid.unwrap_or_else(|| nid_map.get(*id).copied().unwrap_or(0));
-        // Java assigns color based on the node's row index
-        let color_key = GENE_COLOR_NAMES[nl.row % 32].key;
+        // Java assigns color based on the node's row index.
+        // For extracted submodels, color_index stores the ORIGINAL row from the
+        // full layout so the color is preserved after row compression.
+        let color_key = GENE_COLOR_NAMES[nl.color_index % 32].key;
 
         // Java sets isolated nodes' columns to (columnCount - 1).
         // When columnCount is 0 (no links), this wraps to -1.
@@ -410,8 +412,8 @@ fn write_nodes<W: Write>(
             color_key,
         )?;
 
-        // Plain drain zones
-        let plain_dz = plain_drain_zones.get(*id);
+        // Plain drain zones — use pre-computed if available (e.g., from submodel extraction)
+        let plain_dz = nl.plain_drain_zones.as_deref().or_else(|| plain_drain_zones.get(*id).map(|v| v.as_slice()));
         if let Some(zones) = plain_dz {
             if !zones.is_empty() {
                 writeln!(w, "      <drainZones>")?;
@@ -430,8 +432,8 @@ fn write_nodes<W: Write>(
             writeln!(w, "      <drainZones/>")?;
         }
 
-        // Shadow drain zones
-        let shadow_dz = shadow_drain_zones.get(*id);
+        // Shadow drain zones — use pre-computed if available
+        let shadow_dz = nl.shadow_drain_zones.as_deref().or_else(|| shadow_drain_zones.get(*id).map(|v| v.as_slice()));
         if let Some(zones) = shadow_dz {
             if !zones.is_empty() {
                 writeln!(w, "      <drainZonesShadow>")?;
@@ -539,8 +541,10 @@ fn write_links<W: Write>(
         // The standard BioFabric layout treats all links as undirected.
         let directed = false;
 
-        // Java assigns link color based on the shadow column index
-        let color_key = GENE_COLOR_NAMES[ll.column % 32].key;
+        // Java assigns link color based on the shadow column index.
+        // For extracted submodels, color_index stores the ORIGINAL shadow column
+        // from the full layout so the color is preserved after column compression.
+        let color_key = GENE_COLOR_NAMES[ll.color_index % 32].key;
 
         write!(
             w,

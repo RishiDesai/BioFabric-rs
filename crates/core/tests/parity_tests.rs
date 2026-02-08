@@ -500,6 +500,148 @@ fn noa_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("noa").join(filename)
 }
 
+/// Path to an EDA file for fixed link order import.
+fn eda_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("eda").join(filename)
+}
+
+/// Parse an EDA format file and return the link ordering.
+///
+/// The EDA file format specifies a column for each link:
+///   - Non-shadow: `SOURCE (RELATION) TARGET = COLUMN`
+///   - Shadow: `SOURCE shdw(RELATION) TARGET = COLUMN`
+///
+/// Returns a Vec of (source, target, relation, is_shadow, column) sorted by column.
+fn parse_eda_format_file(path: &std::path::Path) -> Vec<(String, String, String, bool, usize)> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read EDA file {}: {}", path.display(), e));
+    let mut entries: Vec<(String, String, String, bool, usize)> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "Link Column" {
+            continue;
+        }
+        if let Some((link_spec, col_str)) = trimmed.rsplit_once(" = ") {
+            let col: usize = col_str.parse()
+                .unwrap_or_else(|e| panic!("Invalid column in EDA: '{}': {}", trimmed, e));
+
+            // Parse link spec: "A (pp) B" or "A shdw(pp) B"
+            let is_shadow = link_spec.contains(" shdw(");
+            if is_shadow {
+                // Format: "SOURCE shdw(RELATION) TARGET"
+                if let Some((source, rest)) = link_spec.split_once(" shdw(") {
+                    if let Some((relation, target)) = rest.split_once(") ") {
+                        entries.push((source.to_string(), target.to_string(), relation.to_string(), true, col));
+                    }
+                }
+            } else {
+                // Format: "SOURCE (RELATION) TARGET"
+                if let Some((source, rest)) = link_spec.split_once(" (") {
+                    if let Some((relation, target)) = rest.split_once(") ") {
+                        entries.push((source.to_string(), target.to_string(), relation.to_string(), false, col));
+                    }
+                }
+            }
+        }
+    }
+    entries.sort_by_key(|(_, _, _, _, col)| *col);
+    entries
+}
+
+/// Run layout with a fixed link order from an EDA file.
+///
+/// This replicates Java's LINK_ATTRIB_LAYOUT BuildMode:
+/// 1. Run the default node layout (BFS order) to get node rows
+/// 2. Apply the EDA-specified link ordering instead of the default edge layout
+fn run_layout_with_link_order(network: &Network, eda_path: &std::path::Path) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    // Step 1: Default node layout (BFS)
+    let node_layout = DefaultNodeLayout::new();
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    // Build node-to-row map
+    let node_to_row: HashMap<NodeId, usize> = node_order.iter().enumerate()
+        .map(|(row, id)| (id.clone(), row))
+        .collect();
+
+    // Step 2: Parse EDA file
+    let eda_entries = parse_eda_format_file(eda_path);
+
+    // Step 3: Build layout from the fixed link order
+    let mut layout = NetworkLayout::with_capacity(node_order.len(), eda_entries.len());
+    layout.row_count = node_order.len();
+
+    // Initialize node layouts
+    for (i, node_id) in node_order.iter().enumerate() {
+        let mut nl = biofabric_core::layout::result::NodeLayout::new(i, node_id.as_str());
+        nl.color_index = i;
+        layout.nodes.insert(node_id.clone(), nl);
+    }
+
+    // Build link layouts from EDA entries
+    // The EDA specifies the SHADOW column order. Non-shadow links also have
+    // a non-shadow column counter.
+    let mut ns_col = 0usize; // non-shadow column counter
+    for (source, target, relation, is_shadow, shadow_col) in &eda_entries {
+        let src_id = NodeId::new(source.as_str());
+        let tgt_id = NodeId::new(target.as_str());
+
+        // In Rust, shadow links have FLIPPED source/target
+        let (ll_src, ll_tgt) = if *is_shadow {
+            (tgt_id.clone(), src_id.clone())
+        } else {
+            (src_id.clone(), tgt_id.clone())
+        };
+
+        let src_row = node_to_row[&ll_src];
+        let tgt_row = node_to_row[&ll_tgt];
+
+        let mut ll = biofabric_core::layout::result::LinkLayout::new(
+            *shadow_col,
+            ll_src.clone(),
+            ll_tgt.clone(),
+            src_row,
+            tgt_row,
+            relation.clone(),
+            *is_shadow,
+        );
+        ll.color_index = *shadow_col;
+
+        if !is_shadow {
+            ll.column_no_shadows = Some(ns_col);
+            // Update node non-shadow spans
+            if let Some(nl) = layout.nodes.get_mut(&ll_src) {
+                nl.update_span_no_shadows(ns_col);
+            }
+            if let Some(nl) = layout.nodes.get_mut(&ll_tgt) {
+                nl.update_span_no_shadows(ns_col);
+            }
+            ns_col += 1;
+        }
+
+        // Update node shadow spans
+        if let Some(nl) = layout.nodes.get_mut(&ll_src) {
+            nl.update_span(*shadow_col);
+        }
+        if let Some(nl) = layout.nodes.get_mut(&ll_tgt) {
+            nl.update_span(*shadow_col);
+        }
+
+        layout.links.push(ll);
+    }
+
+    layout.column_count = eda_entries.len();
+    layout.column_count_no_shadows = ns_col;
+
+    layout
+}
+
 /// Path to an alignment file.
 fn align_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("align").join(filename)
@@ -567,6 +709,284 @@ fn run_alignment_layout(
 fn extract_subnetwork(network: &Network, node_names: &[&str]) -> Network {
     let node_ids: HashSet<NodeId> = node_names.iter().map(|n| NodeId::new(*n)).collect();
     network.extract_subnetwork(&node_ids)
+}
+
+/// Extract a submodel from a fully laid-out session, compressing rows and columns.
+///
+/// This replicates the Java `BioFabricNetwork.fillSubModel()` behavior:
+/// 1. Keep only links where both endpoints are in the extract set
+/// 2. Keep only nodes that are in the extract set
+/// 3. Compress rows (renumber sequentially)
+/// 4. Compress non-shadow and shadow columns independently
+/// 5. Set each node's maxCol = maxLinkCol and maxColSha = maxShadLinkCol
+///    (matching a Java HashMap key-type mismatch bug where nodes always get
+///     the global max column as their rightmost column)
+///
+/// This is different from `extract_subnetwork` which extracts from the raw
+/// network and re-runs the layout from scratch. This function preserves the
+/// original layout ordering and just compresses it.
+fn extract_submodel(
+    network: &Network,
+    layout: &NetworkLayout,
+    node_names: &[&str],
+) -> (Network, NetworkLayout) {
+    use std::collections::BTreeSet;
+
+    let extract_set: HashSet<NodeId> = node_names.iter().map(|n| NodeId::new(*n)).collect();
+
+    // Collect sub-nodes and sub-links from the full layout
+    // Sub-links: links where both source and target are in extract_set
+    // For shadow links in Rust, source/target are FLIPPED from the original.
+    // But for the extraction filter, we need ORIGINAL source/target.
+    // In the Rust model, shadow links have flipped source/target, so we need
+    // to check both orientations.
+    let sub_links: Vec<&biofabric_core::layout::result::LinkLayout> = layout
+        .links
+        .iter()
+        .filter(|ll| {
+            // For non-shadow links: source and target are as-is
+            // For shadow links: source and target are SWAPPED in Rust model
+            // Java keeps original source/target for shadows
+            // So for extraction filter, we check:
+            //   non-shadow: source & target in set
+            //   shadow: target (=original source) & source (=original target) in set
+            // Either way, both endpoint IDs must be in the extract set
+            extract_set.contains(&ll.source) && extract_set.contains(&ll.target)
+        })
+        .collect();
+
+    // Gather full-layout column values we need to keep
+    let mut need_rows = BTreeSet::new();
+    let mut need_columns = BTreeSet::new(); // non-shadow
+    let mut need_columns_shad = BTreeSet::new(); // shadow (all columns)
+
+    // From nodes: add each node's min column from the full layout
+    for (id, nl) in layout.iter_nodes() {
+        if !extract_set.contains(id) {
+            continue;
+        }
+        need_rows.insert(nl.row);
+        if nl.has_edges_no_shadows() {
+            need_columns.insert(nl.min_col_no_shadows);
+        }
+        if nl.has_edges() {
+            need_columns_shad.insert(nl.min_col);
+        }
+    }
+
+    // From links: add rows and columns
+    for ll in &sub_links {
+        need_rows.insert(ll.source_row);
+        need_rows.insert(ll.target_row);
+        if !ll.is_shadow {
+            if let Some(col) = ll.column_no_shadows {
+                need_columns.insert(col);
+            }
+        }
+        need_columns_shad.insert(ll.column);
+    }
+
+    // Create compression maps (full-scale → mini-scale)
+    let row_map: std::collections::BTreeMap<usize, usize> = need_rows
+        .iter()
+        .enumerate()
+        .map(|(i, &r)| (r, i))
+        .collect();
+    let col_map: std::collections::BTreeMap<usize, usize> = need_columns
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| (c, i))
+        .collect();
+    let shad_col_map: std::collections::BTreeMap<usize, usize> = need_columns_shad
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| (c, i))
+        .collect();
+
+    // Build compressed links and track max columns
+    let mut max_link_col: Option<usize> = None;
+    let mut max_shad_link_col: Option<usize> = None;
+    let mut compressed_links: Vec<biofabric_core::layout::result::LinkLayout> = Vec::new();
+
+    for ll in &sub_links {
+        let new_src_row = row_map[&ll.source_row];
+        let new_tgt_row = row_map[&ll.target_row];
+        let new_shad_col = shad_col_map[&ll.column];
+
+        let new_col_no_shadows = if ll.is_shadow {
+            None
+        } else {
+            let c = ll.column_no_shadows.map(|c| col_map[&c]);
+            if let Some(col) = c {
+                max_link_col = Some(max_link_col.map_or(col, |m: usize| m.max(col)));
+            }
+            c
+        };
+
+        max_shad_link_col = Some(
+            max_shad_link_col.map_or(new_shad_col, |m: usize| m.max(new_shad_col)),
+        );
+
+        let mut new_ll = biofabric_core::layout::result::LinkLayout::new(
+            new_shad_col,
+            ll.source.clone(),
+            ll.target.clone(),
+            new_src_row,
+            new_tgt_row,
+            ll.relation.clone(),
+            ll.is_shadow,
+        );
+        new_ll.column_no_shadows = new_col_no_shadows;
+        new_ll.color_index = ll.color_index;
+        compressed_links.push(new_ll);
+    }
+
+    // Java increments max columns by 1 (to represent "count" rather than "max index")
+    let max_link_col = max_link_col.map_or(1, |m| m + 1);
+    let max_shad_link_col = max_shad_link_col.map_or(1, |m| m + 1);
+
+    // Build compressed nodes
+    // Due to the Java NID/NetNode type mismatch bug in fillSubModel,
+    // maxCol is always maxLinkCol and maxColSha is always maxShadLinkCol
+    let mut compressed_nodes: indexmap::IndexMap<NodeId, biofabric_core::layout::result::NodeLayout> =
+        indexmap::IndexMap::new();
+
+    // Build a nid map from the FULL network's node order
+    // (matching the Java UniqueLabeller sequential IDs)
+    let nid_map: HashMap<NodeId, usize> = network
+        .node_ids()
+        .enumerate()
+        .map(|(i, id)| (id.clone(), i))
+        .collect();
+
+    // Process nodes in row order
+    let mut nodes_sorted: Vec<(&NodeId, &biofabric_core::layout::result::NodeLayout)> = layout
+        .iter_nodes()
+        .filter(|(id, _)| extract_set.contains(id))
+        .collect();
+    nodes_sorted.sort_by_key(|(_, nl)| nl.row);
+
+    for (id, nl) in &nodes_sorted {
+        let new_row = row_map[&nl.row];
+        let mut new_nl = biofabric_core::layout::result::NodeLayout::new(new_row, &nl.name);
+
+        // minCol from compression
+        if nl.has_edges_no_shadows() {
+            let min_col = col_map[&nl.min_col_no_shadows];
+            new_nl.min_col_no_shadows = min_col;
+            // maxCol = maxLinkCol (Java bug: NID/NetNode mismatch causes fallback)
+            new_nl.max_col_no_shadows = max_link_col;
+        }
+        if nl.has_edges() {
+            let min_col_sha = shad_col_map[&nl.min_col];
+            new_nl.min_col = min_col_sha;
+            // maxColSha = maxShadLinkCol (Java bug: same reason)
+            new_nl.max_col = max_shad_link_col;
+        }
+
+        // Set nid from the FULL network's node enumeration order
+        // This matches Java's UniqueLabeller sequential IDs
+        new_nl.nid = nid_map.get(*id).copied();
+        // Preserve original color: Java's extraction uses infoFull.colorKey
+        // which is based on the ORIGINAL row, not the compressed row
+        new_nl.color_index = nl.row; // Color is derived from original row index
+
+        // Pre-compute drain zones using Java's fillSubModel scan behavior
+        // Java scans BACKWARD from maxCol to minCol for plain drain zones,
+        // and FORWARD from minColSha to maxColSha for shadow drain zones.
+        // When maxCol > actual rightmost link column (due to the NID/NetNode bug),
+        // the scan hits a gap immediately and produces no drain zone.
+
+        // Plain (non-shadow) drain zones: scan from maxCol down to minCol
+        {
+            let mut dz: Option<(usize, usize)> = None;
+            let range_max = new_nl.max_col_no_shadows;
+            let range_min = new_nl.min_col_no_shadows;
+            if range_max >= range_min && range_max != usize::MAX {
+                let mut col = range_max as isize;
+                while col >= range_min as isize {
+                    let c = col as usize;
+                    // Find a non-shadow link at this column
+                    let link = compressed_links.iter().find(|ll| {
+                        !ll.is_shadow && ll.column_no_shadows == Some(c)
+                    });
+                    match link {
+                        None => break, // gap → stop
+                        Some(ll) => {
+                            // Check if this node is involved
+                            if ll.source != **id && ll.target != **id {
+                                break; // link doesn't involve this node
+                            }
+                            // For non-shadow: check if bottom row = node row AND top row != node row → break
+                            let bottom = ll.source_row.max(ll.target_row);
+                            let top = ll.source_row.min(ll.target_row);
+                            if bottom == new_row && top != new_row {
+                                break;
+                            }
+                            // If top row = node row, add to drain zone
+                            if top == new_row {
+                                dz = Some(match dz {
+                                    None => (c, c),
+                                    Some((min, max)) => (min.min(c), max.max(c)),
+                                });
+                            }
+                        }
+                    }
+                    col -= 1;
+                }
+            }
+            new_nl.plain_drain_zones = Some(dz.map_or(Vec::new(), |z| vec![z]));
+        }
+
+        // Shadow drain zones: scan FORWARD from minColSha to maxColSha
+        {
+            let mut dz: Option<(usize, usize)> = None;
+            let range_min = new_nl.min_col;
+            let range_max = new_nl.max_col;
+            if range_max >= range_min && range_min != usize::MAX {
+                for c in range_min..=range_max {
+                    let link = compressed_links.iter().find(|ll| ll.column == c);
+                    match link {
+                        None => continue, // gap → skip (not break!)
+                        Some(ll) => {
+                            // If we have an active drain zone and this link doesn't involve the node, break
+                            if dz.is_some() && ll.source != **id && ll.target != **id {
+                                break;
+                            }
+                            let top = ll.source_row.min(ll.target_row);
+                            let bottom = ll.source_row.max(ll.target_row);
+                            // Shadow drain zone condition:
+                            // (top == node_row && !isShadow) || (bottom == node_row && isShadow)
+                            let qualifies = (top == new_row && !ll.is_shadow)
+                                || (bottom == new_row && ll.is_shadow);
+                            if qualifies {
+                                dz = Some(match dz {
+                                    None => (c, c),
+                                    Some((min, max)) => (min.min(c), max.max(c)),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            new_nl.shadow_drain_zones = Some(dz.map_or(Vec::new(), |z| vec![z]));
+        }
+
+        compressed_nodes.insert((*id).clone(), new_nl);
+    }
+
+    // Build the compressed NetworkLayout
+    let mut new_layout = NetworkLayout::new();
+    new_layout.nodes = compressed_nodes;
+    new_layout.links = compressed_links;
+    new_layout.row_count = row_map.len();
+    new_layout.column_count = max_shad_link_col;
+    new_layout.column_count_no_shadows = max_link_col;
+
+    // Build the extracted network
+    let sub_network = extract_subnetwork(network, node_names);
+
+    (sub_network, new_layout)
 }
 
 /// Format a NetworkLayout as NOA string.
@@ -849,15 +1269,23 @@ fn run_bif_test(cfg: &ParityConfig) {
         let input = network_path(cfg.input_file);
         assert!(input.exists(), "Input file not found: {}", input.display());
 
-        let mut network = load_network(&input);
+        let network = load_network(&input);
 
-        // P12: Subnetwork extraction
-        if let Some(extract_nodes) = cfg.extract_nodes {
-            network = extract_subnetwork(&network, extract_nodes);
-        }
+        // P12: Subnetwork extraction — uses full layout + compress approach
+        // (must be done after layout, not before)
+        let (network, extract_layout) = if let Some(extract_nodes) = cfg.extract_nodes {
+            // First do the full layout, then extract/compress
+            let full_layout = run_default_layout(&network);
+            let (sub_net, sub_layout) = extract_submodel(&network, &full_layout, extract_nodes);
+            (sub_net, Some(sub_layout))
+        } else {
+            (network, None)
+        };
 
-        // Compute layout (same dispatch logic as run_eda_test)
-        let layout = if cfg.layout == "alignment" {
+        // If extraction already produced a layout, use it; otherwise compute
+        let layout = if let Some(el) = extract_layout {
+            el
+        } else if cfg.layout == "alignment" {
             let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
             let align_file = cfg.align_file.expect("alignment tests require align_file");
             let g2_path = network_path(net2_file);
@@ -901,6 +1329,11 @@ fn run_bif_test(cfg: &ParityConfig) {
             assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
             let node_order = parse_noa_format_file(&noa_path);
             run_layout_with_node_order(&network, node_order)
+        } else if let Some(eda_file) = cfg.eda_file {
+            // P11: Fixed link-order import from EDA file
+            let eda_path = eda_file_path(eda_file);
+            assert!(eda_path.exists(), "EDA file not found: {}", eda_path.display());
+            run_layout_with_link_order(&network, &eda_path)
         } else if let Some(link_groups) = cfg.link_groups {
             let mode = match cfg.group_mode {
                 Some("per_node") => LayoutMode::PerNode,

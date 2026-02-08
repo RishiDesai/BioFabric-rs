@@ -197,6 +197,21 @@ pub struct NodeLayout {
     /// the NID from network enumeration order.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nid: Option<usize>,
+
+    /// Pre-computed plain (non-shadow) drain zones.
+    ///
+    /// When `Some`, the XML writer uses these instead of computing drain zones
+    /// from the link layout. Used by submodel extraction where the Java
+    /// drain zone scan behavior differs from the standard computation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plain_drain_zones: Option<Vec<(usize, usize)>>,
+
+    /// Pre-computed shadow drain zones.
+    ///
+    /// When `Some`, the XML writer uses these instead of computing drain zones
+    /// from the link layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_drain_zones: Option<Vec<(usize, usize)>>,
 }
 
 impl NodeLayout {
@@ -211,6 +226,8 @@ impl NodeLayout {
             name: name.into(),
             color_index: 0,
             nid: None,
+            plain_drain_zones: None,
+            shadow_drain_zones: None,
         }
     }
 
