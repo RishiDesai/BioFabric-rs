@@ -569,6 +569,284 @@ fn extract_subnetwork(network: &Network, node_names: &[&str]) -> Network {
     network.extract_subnetwork(&node_ids)
 }
 
+/// Extract a submodel from a fully laid-out session, compressing rows and columns.
+///
+/// This replicates the Java `BioFabricNetwork.fillSubModel()` behavior:
+/// 1. Keep only links where both endpoints are in the extract set
+/// 2. Keep only nodes that are in the extract set
+/// 3. Compress rows (renumber sequentially)
+/// 4. Compress non-shadow and shadow columns independently
+/// 5. Set each node's maxCol = maxLinkCol and maxColSha = maxShadLinkCol
+///    (matching a Java HashMap key-type mismatch bug where nodes always get
+///     the global max column as their rightmost column)
+///
+/// This is different from `extract_subnetwork` which extracts from the raw
+/// network and re-runs the layout from scratch. This function preserves the
+/// original layout ordering and just compresses it.
+fn extract_submodel(
+    network: &Network,
+    layout: &NetworkLayout,
+    node_names: &[&str],
+) -> (Network, NetworkLayout) {
+    use std::collections::BTreeSet;
+
+    let extract_set: HashSet<NodeId> = node_names.iter().map(|n| NodeId::new(*n)).collect();
+
+    // Collect sub-nodes and sub-links from the full layout
+    // Sub-links: links where both source and target are in extract_set
+    // For shadow links in Rust, source/target are FLIPPED from the original.
+    // But for the extraction filter, we need ORIGINAL source/target.
+    // In the Rust model, shadow links have flipped source/target, so we need
+    // to check both orientations.
+    let sub_links: Vec<&biofabric_core::layout::result::LinkLayout> = layout
+        .links
+        .iter()
+        .filter(|ll| {
+            // For non-shadow links: source and target are as-is
+            // For shadow links: source and target are SWAPPED in Rust model
+            // Java keeps original source/target for shadows
+            // So for extraction filter, we check:
+            //   non-shadow: source & target in set
+            //   shadow: target (=original source) & source (=original target) in set
+            // Either way, both endpoint IDs must be in the extract set
+            extract_set.contains(&ll.source) && extract_set.contains(&ll.target)
+        })
+        .collect();
+
+    // Gather full-layout column values we need to keep
+    let mut need_rows = BTreeSet::new();
+    let mut need_columns = BTreeSet::new(); // non-shadow
+    let mut need_columns_shad = BTreeSet::new(); // shadow (all columns)
+
+    // From nodes: add each node's min column from the full layout
+    for (id, nl) in layout.iter_nodes() {
+        if !extract_set.contains(id) {
+            continue;
+        }
+        need_rows.insert(nl.row);
+        if nl.has_edges_no_shadows() {
+            need_columns.insert(nl.min_col_no_shadows);
+        }
+        if nl.has_edges() {
+            need_columns_shad.insert(nl.min_col);
+        }
+    }
+
+    // From links: add rows and columns
+    for ll in &sub_links {
+        need_rows.insert(ll.source_row);
+        need_rows.insert(ll.target_row);
+        if !ll.is_shadow {
+            if let Some(col) = ll.column_no_shadows {
+                need_columns.insert(col);
+            }
+        }
+        need_columns_shad.insert(ll.column);
+    }
+
+    // Create compression maps (full-scale → mini-scale)
+    let row_map: std::collections::BTreeMap<usize, usize> = need_rows
+        .iter()
+        .enumerate()
+        .map(|(i, &r)| (r, i))
+        .collect();
+    let col_map: std::collections::BTreeMap<usize, usize> = need_columns
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| (c, i))
+        .collect();
+    let shad_col_map: std::collections::BTreeMap<usize, usize> = need_columns_shad
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| (c, i))
+        .collect();
+
+    // Build compressed links and track max columns
+    let mut max_link_col: Option<usize> = None;
+    let mut max_shad_link_col: Option<usize> = None;
+    let mut compressed_links: Vec<biofabric_core::layout::result::LinkLayout> = Vec::new();
+
+    for ll in &sub_links {
+        let new_src_row = row_map[&ll.source_row];
+        let new_tgt_row = row_map[&ll.target_row];
+        let new_shad_col = shad_col_map[&ll.column];
+
+        let new_col_no_shadows = if ll.is_shadow {
+            None
+        } else {
+            let c = ll.column_no_shadows.map(|c| col_map[&c]);
+            if let Some(col) = c {
+                max_link_col = Some(max_link_col.map_or(col, |m: usize| m.max(col)));
+            }
+            c
+        };
+
+        max_shad_link_col = Some(
+            max_shad_link_col.map_or(new_shad_col, |m: usize| m.max(new_shad_col)),
+        );
+
+        let mut new_ll = biofabric_core::layout::result::LinkLayout::new(
+            new_shad_col,
+            ll.source.clone(),
+            ll.target.clone(),
+            new_src_row,
+            new_tgt_row,
+            ll.relation.clone(),
+            ll.is_shadow,
+        );
+        new_ll.column_no_shadows = new_col_no_shadows;
+        new_ll.color_index = ll.color_index;
+        compressed_links.push(new_ll);
+    }
+
+    // Java increments max columns by 1 (to represent "count" rather than "max index")
+    let max_link_col = max_link_col.map_or(1, |m| m + 1);
+    let max_shad_link_col = max_shad_link_col.map_or(1, |m| m + 1);
+
+    // Build compressed nodes
+    // Due to the Java NID/NetNode type mismatch bug in fillSubModel,
+    // maxCol is always maxLinkCol and maxColSha is always maxShadLinkCol
+    let mut compressed_nodes: indexmap::IndexMap<NodeId, biofabric_core::layout::result::NodeLayout> =
+        indexmap::IndexMap::new();
+
+    // Build a nid map from the FULL network's node order
+    // (matching the Java UniqueLabeller sequential IDs)
+    let nid_map: HashMap<NodeId, usize> = network
+        .node_ids()
+        .enumerate()
+        .map(|(i, id)| (id.clone(), i))
+        .collect();
+
+    // Process nodes in row order
+    let mut nodes_sorted: Vec<(&NodeId, &biofabric_core::layout::result::NodeLayout)> = layout
+        .iter_nodes()
+        .filter(|(id, _)| extract_set.contains(id))
+        .collect();
+    nodes_sorted.sort_by_key(|(_, nl)| nl.row);
+
+    for (id, nl) in &nodes_sorted {
+        let new_row = row_map[&nl.row];
+        let mut new_nl = biofabric_core::layout::result::NodeLayout::new(new_row, &nl.name);
+
+        // minCol from compression
+        if nl.has_edges_no_shadows() {
+            let min_col = col_map[&nl.min_col_no_shadows];
+            new_nl.min_col_no_shadows = min_col;
+            // maxCol = maxLinkCol (Java bug: NID/NetNode mismatch causes fallback)
+            new_nl.max_col_no_shadows = max_link_col;
+        }
+        if nl.has_edges() {
+            let min_col_sha = shad_col_map[&nl.min_col];
+            new_nl.min_col = min_col_sha;
+            // maxColSha = maxShadLinkCol (Java bug: same reason)
+            new_nl.max_col = max_shad_link_col;
+        }
+
+        // Set nid from the FULL network's node enumeration order
+        // This matches Java's UniqueLabeller sequential IDs
+        new_nl.nid = nid_map.get(*id).copied();
+        // Preserve original color: Java's extraction uses infoFull.colorKey
+        // which is based on the ORIGINAL row, not the compressed row
+        new_nl.color_index = nl.row; // Color is derived from original row index
+
+        // Pre-compute drain zones using Java's fillSubModel scan behavior
+        // Java scans BACKWARD from maxCol to minCol for plain drain zones,
+        // and FORWARD from minColSha to maxColSha for shadow drain zones.
+        // When maxCol > actual rightmost link column (due to the NID/NetNode bug),
+        // the scan hits a gap immediately and produces no drain zone.
+
+        // Plain (non-shadow) drain zones: scan from maxCol down to minCol
+        {
+            let mut dz: Option<(usize, usize)> = None;
+            let range_max = new_nl.max_col_no_shadows;
+            let range_min = new_nl.min_col_no_shadows;
+            if range_max >= range_min && range_max != usize::MAX {
+                let mut col = range_max as isize;
+                while col >= range_min as isize {
+                    let c = col as usize;
+                    // Find a non-shadow link at this column
+                    let link = compressed_links.iter().find(|ll| {
+                        !ll.is_shadow && ll.column_no_shadows == Some(c)
+                    });
+                    match link {
+                        None => break, // gap → stop
+                        Some(ll) => {
+                            // Check if this node is involved
+                            if ll.source != **id && ll.target != **id {
+                                break; // link doesn't involve this node
+                            }
+                            // For non-shadow: check if bottom row = node row AND top row != node row → break
+                            let bottom = ll.source_row.max(ll.target_row);
+                            let top = ll.source_row.min(ll.target_row);
+                            if bottom == new_row && top != new_row {
+                                break;
+                            }
+                            // If top row = node row, add to drain zone
+                            if top == new_row {
+                                dz = Some(match dz {
+                                    None => (c, c),
+                                    Some((min, max)) => (min.min(c), max.max(c)),
+                                });
+                            }
+                        }
+                    }
+                    col -= 1;
+                }
+            }
+            new_nl.plain_drain_zones = Some(dz.map_or(Vec::new(), |z| vec![z]));
+        }
+
+        // Shadow drain zones: scan FORWARD from minColSha to maxColSha
+        {
+            let mut dz: Option<(usize, usize)> = None;
+            let range_min = new_nl.min_col;
+            let range_max = new_nl.max_col;
+            if range_max >= range_min && range_min != usize::MAX {
+                for c in range_min..=range_max {
+                    let link = compressed_links.iter().find(|ll| ll.column == c);
+                    match link {
+                        None => continue, // gap → skip (not break!)
+                        Some(ll) => {
+                            // If we have an active drain zone and this link doesn't involve the node, break
+                            if dz.is_some() && ll.source != **id && ll.target != **id {
+                                break;
+                            }
+                            let top = ll.source_row.min(ll.target_row);
+                            let bottom = ll.source_row.max(ll.target_row);
+                            // Shadow drain zone condition:
+                            // (top == node_row && !isShadow) || (bottom == node_row && isShadow)
+                            let qualifies = (top == new_row && !ll.is_shadow)
+                                || (bottom == new_row && ll.is_shadow);
+                            if qualifies {
+                                dz = Some(match dz {
+                                    None => (c, c),
+                                    Some((min, max)) => (min.min(c), max.max(c)),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            new_nl.shadow_drain_zones = Some(dz.map_or(Vec::new(), |z| vec![z]));
+        }
+
+        compressed_nodes.insert((*id).clone(), new_nl);
+    }
+
+    // Build the compressed NetworkLayout
+    let mut new_layout = NetworkLayout::new();
+    new_layout.nodes = compressed_nodes;
+    new_layout.links = compressed_links;
+    new_layout.row_count = row_map.len();
+    new_layout.column_count = max_shad_link_col;
+    new_layout.column_count_no_shadows = max_link_col;
+
+    // Build the extracted network
+    let sub_network = extract_subnetwork(network, node_names);
+
+    (sub_network, new_layout)
+}
+
 /// Format a NetworkLayout as NOA string.
 fn format_noa(layout: &NetworkLayout) -> String {
     let mut out = String::new();
@@ -849,15 +1127,23 @@ fn run_bif_test(cfg: &ParityConfig) {
         let input = network_path(cfg.input_file);
         assert!(input.exists(), "Input file not found: {}", input.display());
 
-        let mut network = load_network(&input);
+        let network = load_network(&input);
 
-        // P12: Subnetwork extraction
-        if let Some(extract_nodes) = cfg.extract_nodes {
-            network = extract_subnetwork(&network, extract_nodes);
-        }
+        // P12: Subnetwork extraction — uses full layout + compress approach
+        // (must be done after layout, not before)
+        let (mut network, extract_layout) = if let Some(extract_nodes) = cfg.extract_nodes {
+            // First do the full layout, then extract/compress
+            let full_layout = run_default_layout(&network);
+            let (sub_net, sub_layout) = extract_submodel(&network, &full_layout, extract_nodes);
+            (sub_net, Some(sub_layout))
+        } else {
+            (network, None)
+        };
 
-        // Compute layout (same dispatch logic as run_eda_test)
-        let layout = if cfg.layout == "alignment" {
+        // If extraction already produced a layout, use it; otherwise compute
+        let layout = if let Some(el) = extract_layout {
+            el
+        } else if cfg.layout == "alignment" {
             let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
             let align_file = cfg.align_file.expect("alignment tests require align_file");
             let g2_path = network_path(net2_file);
