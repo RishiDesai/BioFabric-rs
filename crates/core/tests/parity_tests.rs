@@ -1956,6 +1956,19 @@ fn generate_goldens() {
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_010.align", "align_yeast_sc_s3_010", "group"),
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_030.align", "align_yeast_sc_s3_030", "group"),
         ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_100.align", "align_yeast_sc_s3_100", "group"),
+        // Orphan variants
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_orphan", "orphan"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_orphan", "orphan"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_orphan", "orphan"),
+        // Cycle variants
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_cycle", "cycle"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_cycle_noshadow", "cycle"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_cycle", "cycle"),
+        // NG variants (same as group but with NG mode)
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_nc", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_ng_nc", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_jacc", "group"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_ng_nc", "group"),
     ];
 
     for (g1_file, g2_file, align_file_name, golden_dirname, mode_hint) in &align_cases {
