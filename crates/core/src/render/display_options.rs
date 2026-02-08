@@ -139,6 +139,56 @@ pub struct DisplayOptions {
     ///
     /// - Java: `BioFabricOverview`
     pub show_overview: bool,
+
+    // =====================================================================
+    // BIF-specific display options (match Java FabricDisplayOptions)
+    // =====================================================================
+
+    /// Node color lighter level (controls brighter palette computation).
+    ///
+    /// In the BIF XML, this affects the `<colors>` section (brighter palette)
+    /// and is written as `nodeLight` attribute in `<displayOptions>` when
+    /// non-default.
+    ///
+    /// Default: 0.43 (matching Java `DEFAULT_NODE_LIGHTER_LEVEL_`)
+    ///
+    /// ## References
+    ///
+    /// - Java: `FabricDisplayOptions.nodeLighterLevel_`
+    pub node_lighter_level: f64,
+
+    /// Link color darker level (controls darker palette computation).
+    ///
+    /// In the BIF XML, this affects the `<colors>` section (darker palette)
+    /// and is written as `linkDark` attribute in `<displayOptions>` when
+    /// non-default.
+    ///
+    /// Default: 0.43 (matching Java `DEFAULT_LINK_DARKER_LEVEL_`)
+    ///
+    /// ## References
+    ///
+    /// - Java: `FabricDisplayOptions.linkDarkerLevel_`
+    pub link_darker_level: f64,
+
+    /// Minimum drain zone size.
+    ///
+    /// Written as `minDrainZone` attribute in `<displayOptions>` when
+    /// non-default.
+    ///
+    /// Default: 1 (matching Java `DEFAULT_MIN_DRAIN_ZONE_`)
+    ///
+    /// ## References
+    ///
+    /// - Java: `FabricDisplayOptions.minDrainZone_`
+    pub min_drain_zone: i32,
+
+    /// Whether `shadows` was explicitly written in the BIF XML.
+    ///
+    /// Some alignment BIF files include `shadows="true"` explicitly.
+    /// This flag preserves that for roundtrip fidelity.  When `true`,
+    /// the writer will emit the `shadows` attribute regardless of value.
+    #[serde(default)]
+    pub shadows_explicit: bool,
 }
 
 impl Default for DisplayOptions {
@@ -159,6 +209,10 @@ impl Default for DisplayOptions {
             link_line_width: 1.0,
             selection_line_width: 3.0,
             show_overview: true,
+            node_lighter_level: 0.43,
+            link_darker_level: 0.43,
+            min_drain_zone: 1,
+            shadows_explicit: false,
         }
     }
 }
@@ -185,6 +239,10 @@ impl DisplayOptions {
             link_line_width: 1.0,
             selection_line_width: 3.0,
             show_overview: false, // No minimap in image export
+            node_lighter_level: 0.43,
+            link_darker_level: 0.43,
+            min_drain_zone: 1,
+            shadows_explicit: false,
         }
     }
 
@@ -206,6 +264,10 @@ impl DisplayOptions {
             link_line_width: 1.0,
             selection_line_width: 2.0,
             show_overview: false,
+            node_lighter_level: 0.43,
+            link_darker_level: 0.43,
+            min_drain_zone: 1,
+            shadows_explicit: false,
         }
     }
 }

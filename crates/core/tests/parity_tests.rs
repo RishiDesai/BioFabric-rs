@@ -290,7 +290,12 @@ fn run_layout_with_groups(
     );
 
     let edge_layout = DefaultEdgeLayout::new();
-    edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
+    let mut layout = edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap();
+
+    // Install link group annotations (column range markers for each relation type).
+    // Java does this automatically in DefaultEdgeLayout.installLinkAnnotations().
+    DefaultEdgeLayout::install_link_annotations(&mut layout, link_groups, None);
+    layout
 }
 
 /// Run a similarity layout (resort or clustered mode).
@@ -341,7 +346,12 @@ fn run_hierdag_layout(network: &Network, params: &LayoutParams) -> NetworkLayout
     );
 
     let edge_layout = DefaultEdgeLayout::new();
-    edge_layout.layout_edges(&mut build_data, params, &monitor).unwrap()
+    let mut layout = edge_layout.layout_edges(&mut build_data, params, &monitor).unwrap();
+
+    // Install node annotations for hierarchy levels
+    HierDAGLayout::install_node_annotations(network, params, &mut layout);
+
+    layout
 }
 
 /// Run WorldBank layout and get the NetworkLayout.
@@ -827,29 +837,108 @@ fn run_bif_test(cfg: &ParityConfig) {
         return;
     }
 
-    let input = if cfg.is_roundtrip {
-        golden_dir(cfg.golden_dirname).join("output.bif")
-    } else {
-        network_path(cfg.input_file)
-    };
-    assert!(input.exists(), "Input file not found: {}", input.display());
-
     let golden_bif = read_golden(cfg.golden_dirname, "output.bif");
 
-    // ---- STEP 1: Load the network ----
-    // TODO: Same as NOA/EDA test
+    // ---- STEP 1: Load network and compute layout ----
+    let session = if cfg.is_roundtrip {
+        // Round-trip: read the golden BIF file as a Session
+        let bif_path = golden_dir(cfg.golden_dirname).join("output.bif");
+        assert!(bif_path.exists(), "BIF file not found: {}", bif_path.display());
+        biofabric_core::io::xml::read_session(&bif_path).unwrap()
+    } else {
+        let input = network_path(cfg.input_file);
+        assert!(input.exists(), "Input file not found: {}", input.display());
 
-    // ---- STEP 2: Apply layout and configuration ----
-    // TODO: Same as EDA test (layout + optional shadow/group transforms)
+        let mut network = load_network(&input);
 
-    // ---- STEP 3: Export BIF ----
-    // TODO: let actual_bif = biofabric_core::io::xml::write_session_string(&session);
+        // P12: Subnetwork extraction
+        if let Some(extract_nodes) = cfg.extract_nodes {
+            network = extract_subnetwork(&network, extract_nodes);
+        }
 
-    // ---- STEP 4: Compare ----
-    // TODO: assert_parity("BIF", &golden_bif, &actual_bif);
+        // Compute layout (same dispatch logic as run_eda_test)
+        let layout = if cfg.layout == "alignment" {
+            let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
+            let align_file = cfg.align_file.expect("alignment tests require align_file");
+            let g2_path = network_path(net2_file);
+            assert!(g2_path.exists(), "G2 network not found: {}", g2_path.display());
+            let g2 = load_network(&g2_path);
+            let mode = if cfg.golden_dirname.contains("orphan") {
+                AlignmentLayoutMode::Orphan
+            } else if cfg.golden_dirname.contains("cycle") {
+                AlignmentLayoutMode::Cycle
+            } else {
+                AlignmentLayoutMode::Group
+            };
+            run_alignment_layout(&network, &g2, align_file, mode)
+        } else if cfg.layout == "hierdag" {
+            let mut params = biofabric_core::layout::traits::LayoutParams {
+                include_shadows: true,
+                layout_mode: LayoutMode::PerNode,
+                ..Default::default()
+            };
+            params.point_up = cfg.point_up;
+            run_hierdag_layout(&network, &params)
+        } else if cfg.layout == "world_bank" {
+            run_world_bank_layout(&network)
+        } else if cfg.layout == "control_top" {
+            let ctrl_mode = match cfg.control_mode {
+                Some("degree_only") => ControlOrder::DegreeOnly,
+                Some("partial_order") => ControlOrder::PartialOrder,
+                Some("fixed_list") => ControlOrder::FixedList,
+                _ => ControlOrder::DegreeOnly,
+            };
+            let targ_mode = match cfg.target_mode {
+                Some("target_degree") => TargetOrder::TargetDegree,
+                Some("breadth_order") => TargetOrder::BreadthOrder,
+                _ => TargetOrder::TargetDegree,
+            };
+            run_control_top_layout(&network, ctrl_mode, targ_mode, cfg.control_nodes)
+        } else if cfg.layout == "node_cluster" {
+            run_node_cluster_layout(&network, cfg.attribute_file.unwrap())
+        } else if let Some(noa_file) = cfg.noa_file {
+            let noa_path = noa_file_path(noa_file);
+            assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
+            let node_order = parse_noa_format_file(&noa_path);
+            run_layout_with_node_order(&network, node_order)
+        } else if let Some(link_groups) = cfg.link_groups {
+            let mode = match cfg.group_mode {
+                Some("per_node") => LayoutMode::PerNode,
+                Some("per_network") => LayoutMode::PerNetwork,
+                _ => LayoutMode::PerNode,
+            };
+            let groups: Vec<String> = link_groups.iter().map(|s| s.to_string()).collect();
+            run_layout_with_groups(&network, &groups, mode)
+        } else {
+            match cfg.layout {
+                "similarity_resort" => run_similarity_layout(&network, SimilarityMode::Resort),
+                "similarity_clustered" => run_similarity_layout(&network, SimilarityMode::Clustered),
+                _ => run_default_layout(&network),
+            }
+        };
 
-    let _ = golden_bif;
-    eprintln!("  BIF comparison: STUB (implementation pending)");
+        // Build session
+        let mut session = biofabric_core::io::session::Session::with_layout(network, layout);
+
+        // Apply display option overrides
+        if let Some(dz) = cfg.min_drain_zone {
+            session.display_options.min_drain_zone = dz;
+        }
+        if let Some(nl) = cfg.node_lighter {
+            session.display_options.node_lighter_level = nl as f64;
+        }
+        if let Some(ld) = cfg.link_darker {
+            session.display_options.link_darker_level = ld as f64;
+        }
+
+        session
+    };
+
+    // ---- STEP 2: Export BIF ----
+    let actual_bif = biofabric_core::io::xml::write_session_string(&session).unwrap();
+
+    // ---- STEP 3: Compare ----
+    assert_parity("BIF", &golden_bif, &actual_bif);
 }
 
 // ---------------------------------------------------------------------------
@@ -904,7 +993,6 @@ macro_rules! parity_test {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing XML export"]
             fn [<$name _bif>]() {
                 run_bif_test(&default_config($input, $golden));
             }
@@ -935,7 +1023,6 @@ macro_rules! parity_test_noshadow {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing XML export"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.shadows = false;
@@ -974,7 +1061,6 @@ macro_rules! parity_test_grouped {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing link grouping"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.link_groups = Some($groups);
@@ -993,7 +1079,6 @@ macro_rules! parity_test_roundtrip {
     ) => {
         paste::paste! {
             #[test]
-            #[ignore = "parity: enable after implementing XML round-trip"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config("", $golden);
                 cfg.is_roundtrip = true;
@@ -1033,7 +1118,6 @@ macro_rules! parity_test_layout {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing layout algorithm"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = $layout;
@@ -1071,7 +1155,6 @@ macro_rules! parity_test_hierdag {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing HierDAG layout"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "hierdag";
@@ -1110,7 +1193,6 @@ macro_rules! parity_test_cluster {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing NodeCluster layout"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "node_cluster";
@@ -1152,7 +1234,6 @@ macro_rules! parity_test_controltop {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1195,7 +1276,6 @@ macro_rules! parity_test_controltop {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing ControlTop layout"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "control_top";
@@ -1236,7 +1316,6 @@ macro_rules! parity_test_set {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing SetLayout"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "set";
@@ -1275,7 +1354,6 @@ macro_rules! parity_test_fixed_noa {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_node_order";
@@ -1314,7 +1392,6 @@ macro_rules! parity_test_fixed_eda {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing fixed-order import"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.layout = "fixed_link_order";
@@ -1351,7 +1428,6 @@ macro_rules! parity_test_extract {
             }
 
             #[test]
-            #[ignore = "parity: enable after implementing subnetwork extraction"]
             fn [<$name _bif>]() {
                 let mut cfg = default_config($input, $golden);
                 cfg.extract_nodes = Some($nodes);

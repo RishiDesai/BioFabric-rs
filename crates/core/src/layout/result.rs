@@ -80,6 +80,18 @@ pub struct NetworkLayout {
     ///
     /// - Java: `BioFabricNetwork.linkGrouping_`
     pub link_group_order: Vec<String>,
+
+    /// Layout mode text for BIF serialization.
+    ///
+    /// Java writes this as the `mode` attribute of `<linkGroups>`.
+    /// Typical values: `"perNode"`, `"perNetwork"`.
+    /// Empty string means no explicit mode (ungrouped layout).
+    pub layout_mode_text: String,
+
+    /// Annotations flag for link groups (`<linkGroups annots="...">`).
+    ///
+    /// Typically `"true"` or `"false"`. Empty means default (`"true"`).
+    pub link_group_annots: String,
 }
 
 impl NetworkLayout {
@@ -95,6 +107,8 @@ impl NetworkLayout {
             link_annotations: AnnotationSet::new(),
             link_annotations_no_shadows: AnnotationSet::new(),
             link_group_order: Vec::new(),
+            layout_mode_text: String::new(),
+            link_group_annots: String::new(),
         }
     }
 
@@ -110,6 +124,8 @@ impl NetworkLayout {
             link_annotations: AnnotationSet::new(),
             link_annotations_no_shadows: AnnotationSet::new(),
             link_group_order: Vec::new(),
+            layout_mode_text: String::new(),
+            link_group_annots: String::new(),
         }
     }
 
@@ -174,6 +190,13 @@ pub struct NodeLayout {
 
     /// Color index for this node (for rendering).
     pub color_index: usize,
+
+    /// Original NID from a loaded BIF file (for roundtrip fidelity).
+    ///
+    /// When `Some`, the XML writer uses this value instead of computing
+    /// the NID from network enumeration order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nid: Option<usize>,
 }
 
 impl NodeLayout {
@@ -187,6 +210,7 @@ impl NodeLayout {
             max_col_no_shadows: 0,
             name: name.into(),
             color_index: 0,
+            nid: None,
         }
     }
 

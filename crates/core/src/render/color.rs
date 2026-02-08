@@ -275,7 +275,7 @@ impl ColorPalette {
 /// 13  EX-yellow-green        29  EX-pale-purple
 /// 14  EX-magenta             30  EX-pale-magenta
 /// 15  EX-green               31  EX-pale-red-orange
-fn build_gene_colors() -> [FabricColor; 32] {
+pub(crate) fn build_gene_colors() -> [FabricColor; 32] {
     // Helper: identical to Java's Color.getHSBColor(h, s, b)
     let c = FabricColor::from_hsb;
 

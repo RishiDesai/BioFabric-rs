@@ -315,16 +315,17 @@ impl DefaultEdgeLayout {
     /// Assigns colors to link groups based on their position in the ordered list,
     /// cycling through a set of distinguishable colors.
     fn build_default_color_map(link_groups: &[String]) -> HashMap<String, String> {
-        // A set of distinguishable annotation background colors.
+        // Java's AnnotColor enum names, cycling through 8 light colors.
+        // See: AnnotColorSource.AnnotColor in Java BioFabric.
         const ANNOT_COLORS: &[&str] = &[
-            "#FFE0B2", // light orange
-            "#B3E5FC", // light blue
-            "#C8E6C9", // light green
-            "#F8BBD0", // light pink
-            "#D1C4E9", // light purple
-            "#FFF9C4", // light yellow
-            "#B2DFDB", // light teal
-            "#FFCCBC", // light deep orange
+            "GrayBlue",
+            "Orange",
+            "Yellow",
+            "Green",
+            "Purple",
+            "Pink",
+            "PowderBlue",
+            "Peach",
         ];
 
         let mut map = HashMap::new();
@@ -539,15 +540,29 @@ impl EdgeLayout for DefaultEdgeLayout {
         layout.column_count = col_assigner.column_count();
         layout.column_count_no_shadows = col_assigner.column_count_no_shadows();
 
-        // Collect link group order (unique relations in encounter order)
-        let mut link_group_order: Vec<String> = Vec::new();
-        let mut seen_relations: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for ll in &layout.links {
-            if seen_relations.insert(ll.relation.clone()) {
-                link_group_order.push(ll.relation.clone());
+        // Collect link group order (unique relations in encounter order).
+        // Only populate when explicit link groups were requested — Java's
+        // BioFabricNetwork.groupOrder_ is only non-null in grouped mode,
+        // and the BIF writer only emits <linkGroups> when this is non-empty.
+        if link_groups.is_some() {
+            let mut link_group_order: Vec<String> = Vec::new();
+            let mut seen_relations: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for ll in &layout.links {
+                if seen_relations.insert(ll.relation.clone()) {
+                    link_group_order.push(ll.relation.clone());
+                }
             }
+            layout.link_group_order = link_group_order;
+
+            // Java's LayoutMode.getText() returns "perNode" or "perNetwork"
+            let is_per_network = build_data.layout_mode == LayoutMode::PerNetwork;
+            layout.layout_mode_text = if is_per_network {
+                "perNetwork".to_string()
+            } else {
+                "perNode".to_string()
+            };
         }
-        layout.link_group_order = link_group_order;
 
         Ok(layout)
     }

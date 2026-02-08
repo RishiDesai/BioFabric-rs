@@ -61,6 +61,15 @@ pub struct Session {
     /// Session metadata.
     #[serde(default)]
     pub metadata: SessionMetadata,
+
+    /// Raw XML lines from `<plugInDataSets>` for roundtrip fidelity.
+    ///
+    /// When reading a BIF file, we capture the lines inside the
+    /// `<plugInDataSets>` element verbatim so they can be re-emitted
+    /// during a roundtrip write without needing to fully model every
+    /// possible Java plug-in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_data_lines: Vec<String>,
 }
 
 /// Session-level metadata.
@@ -88,6 +97,7 @@ impl Session {
                 created_by: Some(format!("biofabric-rs {}", env!("CARGO_PKG_VERSION"))),
                 ..Default::default()
             },
+            plugin_data_lines: Vec::new(),
         }
     }
 
@@ -102,6 +112,7 @@ impl Session {
                 created_by: Some(format!("biofabric-rs {}", env!("CARGO_PKG_VERSION"))),
                 ..Default::default()
             },
+            plugin_data_lines: Vec::new(),
         }
     }
 

@@ -23,7 +23,7 @@
 use super::build_data::LayoutBuildData;
 use super::traits::{EdgeLayout, LayoutError, LayoutParams, LayoutResult, NodeLayout};
 use super::result::NetworkLayout;
-use crate::model::{Network, NodeId};
+use crate::model::{Annotation, Network, NodeId};
 use crate::worker::ProgressMonitor;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -159,6 +159,175 @@ impl NodeLayout for HierDAGLayout {
 }
 
 impl HierDAGLayout {
+    /// Install node annotations for the DAG hierarchy levels.
+    ///
+    /// This re-derives the batch/level boundaries from the network using the
+    /// same algorithm as `layout_nodes`, then creates "Level 0", "Level 1", ...
+    /// annotations spanning the corresponding row ranges.
+    ///
+    /// Java: `HierDAGLayout.installNodeAnnotations()`
+    pub fn install_node_annotations(
+        network: &Network,
+        params: &LayoutParams,
+        layout: &mut NetworkLayout,
+    ) {
+        let point_up = params.point_up.unwrap_or(true);
+
+        // Build the same l2s graph as layout_nodes
+        let non_shadow_links: Vec<(&NodeId, &NodeId)> = network
+            .links()
+            .filter(|link| !link.is_shadow)
+            .map(|link| {
+                if point_up {
+                    (&link.source, &link.target)
+                } else {
+                    (&link.target, &link.source)
+                }
+            })
+            .collect();
+
+        let mut l2s: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        let mut in_degs: HashMap<NodeId, usize> = HashMap::new();
+        let mut out_degs: HashMap<NodeId, usize> = HashMap::new();
+
+        for id in network.node_ids() {
+            if !network.lone_nodes().contains(id) {
+                l2s.entry(id.clone()).or_default();
+                in_degs.entry(id.clone()).or_insert(0);
+                out_degs.entry(id.clone()).or_insert(0);
+            }
+        }
+
+        for (src, trg) in &non_shadow_links {
+            l2s.entry((*src).clone()).or_default().insert((*trg).clone());
+            *out_degs.entry((*src).clone()).or_insert(0) += 1;
+            *in_degs.entry((*trg).clone()).or_insert(0) += 1;
+        }
+
+        // Track level boundaries
+        let mut level_boundaries: Vec<(usize, usize)> = Vec::new(); // (start_row, end_row)
+        let mut current_row = 0usize;
+
+        // Level 0: roots
+        let roots = Self::extract_roots(&l2s, &in_degs);
+        if !roots.is_empty() {
+            level_boundaries.push((current_row, current_row + roots.len() - 1));
+            current_row += roots.len();
+        }
+
+        let mut name_to_row: HashMap<NodeId, usize> = HashMap::new();
+        for (i, node) in roots.iter().enumerate() {
+            name_to_row.insert(node.clone(), i);
+        }
+        let mut placed: HashSet<NodeId> = roots.iter().cloned().collect();
+        let all_nodes: HashSet<NodeId> = l2s.keys().cloned().collect();
+        let mut nodes_to_go: HashSet<NodeId> = all_nodes.difference(&placed).cloned().collect();
+
+        while !nodes_to_go.is_empty() {
+            let next_batch = Self::find_next_candidates(
+                &l2s,
+                &in_degs,
+                &name_to_row,
+                &placed,
+            );
+
+            if next_batch.is_empty() {
+                break;
+            }
+
+            let start = current_row;
+            for node in &next_batch {
+                name_to_row.insert(node.clone(), current_row);
+                current_row += 1;
+                placed.insert(node.clone());
+                nodes_to_go.remove(node);
+            }
+            level_boundaries.push((start, current_row - 1));
+        }
+
+        // Create node annotations for each level
+        for (level, (start, end)) in level_boundaries.iter().enumerate() {
+            layout.node_annotations.add(Annotation::new(
+                format!("Level {}", level),
+                *start,
+                *end,
+                0,
+                String::new(), // No color for HierDAG node annotations
+            ));
+        }
+
+        // Build a row-to-level map for link annotation assignment
+        let mut row_to_level: HashMap<usize, usize> = HashMap::new();
+        for (level, (start, end)) in level_boundaries.iter().enumerate() {
+            for row in *start..=*end {
+                row_to_level.insert(row, level);
+            }
+        }
+
+        // Compute link annotations for the shadow view using Java's
+        // calcLevelLinkAnnots algorithm:
+        //
+        // For each node annotation starting from the SECOND, find the first
+        // shadow link whose source is the start node of that annotation.
+        // That position becomes the boundary between link annotation levels.
+        //
+        // Java: HierDAGLayout.calcLevelLinkAnnots()
+        if !layout.links.is_empty() && layout.node_annotations.len() >= 2 {
+            // Build a row-to-node-id map
+            let mut row_to_node: HashMap<usize, NodeId> = HashMap::new();
+            for (id, nl) in layout.iter_nodes() {
+                row_to_node.insert(nl.row, id.clone());
+            }
+
+            // Sort links by shadow column
+            let mut sorted_links: Vec<&super::result::LinkLayout> =
+                layout.links.iter().collect();
+            sorted_links.sort_by_key(|ll| ll.column);
+
+            let num_links = sorted_links.len();
+            let mut start_pos = 0usize;
+            let mut annot_count = 0usize;
+
+            let node_annots: Vec<_> = layout.node_annotations.iter().collect();
+            // Skip first node annotation, iterate from second onwards
+            for annot in &node_annots[1..] {
+                let start_row = annot.start;
+                if let Some(start_node) = row_to_node.get(&start_row) {
+                    // Find first shadow link where the ORIGINAL source matches start_node.
+                    // In Rust, shadow links have flipped source/target, so the original
+                    // source is stored in ll.target for shadow links.
+                    for (i, ll) in sorted_links.iter().enumerate() {
+                        if ll.is_shadow && &ll.target == start_node {
+                            // Found the boundary
+                            if i > start_pos {
+                                layout.link_annotations.add(Annotation::new(
+                                    format!("Level {}", annot_count),
+                                    start_pos,
+                                    i - 1,
+                                    0,
+                                    String::new(),
+                                ));
+                                annot_count += 1;
+                                start_pos = i;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            // Add the final annotation
+            if num_links > 0 {
+                layout.link_annotations.add(Annotation::new(
+                    format!("Level {}", annot_count),
+                    start_pos,
+                    num_links - 1,
+                    0,
+                    String::new(),
+                ));
+            }
+        }
+    }
+
     /// Extract root nodes (sink nodes in the l2s graph — nodes with empty
     /// target sets). Ordered by in-degree descending, with ties broken by
     /// ascending lexicographic order.
