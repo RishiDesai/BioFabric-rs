@@ -1940,6 +1940,129 @@ fn generate_goldens() {
         generated += 1;
     }
 
+    // ---- Alignment layout goldens ----
+    let align_cases: Vec<(&str, &str, &str, &str, &str)> = vec![
+        // (g1_file, g2_file, align_file, golden_dirname, mode_hint)
+        ("align_net1.sif", "align_net2.sif", "test_perfect.align", "align_perfect", "group"),
+        ("align_net1.sif", "align_net2.sif", "test_partial.align", "align_partial", "group"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_importance_pure.align", "align_yeast_sc_importance_pure", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_050.align", "align_yeast_sc_s3_050", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_001.align", "align_yeast_sc_s3_001", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_003.align", "align_yeast_sc_s3_003", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_005.align", "align_yeast_sc_s3_005", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_010.align", "align_yeast_sc_s3_010", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_030.align", "align_yeast_sc_s3_030", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_100.align", "align_yeast_sc_s3_100", "group"),
+    ];
+
+    for (g1_file, g2_file, align_file_name, golden_dirname, mode_hint) in &align_cases {
+        let g1_path = network_path(g1_file);
+        let g2_path = network_path(g2_file);
+        let align_path = parity_root().join("networks").join("align").join(align_file_name);
+
+        if !g1_path.exists() || !g2_path.exists() || !align_path.exists() {
+            eprintln!("SKIP: alignment input not found for {}", golden_dirname);
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (alignment): {} -> {}", align_file_name, golden_dirname);
+
+        let g1 = load_network(&g1_path);
+        let g2 = load_network(&g2_path);
+
+        let mode = match *mode_hint {
+            "orphan" => AlignmentLayoutMode::Orphan,
+            "cycle" => AlignmentLayoutMode::Cycle,
+            _ => AlignmentLayoutMode::Group,
+        };
+
+        let layout = run_alignment_layout(&g1, &g2, align_file_name, mode);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        // Also generate scores file for scoring tests
+        {
+            let monitor = NoopMonitor;
+            let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
+            let merged = MergedNetwork::from_alignment(&g1, &g2, &alignment, None, &monitor).unwrap();
+            let scores = biofabric_core::alignment::scoring::AlignmentScores::topological(&merged, &monitor);
+
+            let mut scores_content = String::new();
+            scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", scores.ec));
+            scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", scores.s3));
+            scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", scores.ics));
+
+            // If we can compute evaluation metrics, add them too
+            // For now, try to find a perfect alignment
+            let perfect_align_name = if *golden_dirname == "align_casestudy_iv" {
+                Some(*align_file_name)
+            } else if golden_dirname.starts_with("align_yeast_sc_") {
+                Some("yeast_sc_perfect.align")
+            } else if *golden_dirname == "align_perfect" || *golden_dirname == "align_partial" {
+                Some("test_perfect.align")
+            } else {
+                None
+            };
+
+            if let Some(perf_name) = perfect_align_name {
+                let perf_path = parity_root().join("networks").join("align").join(perf_name);
+                if perf_path.exists() {
+                    let perfect = biofabric_core::io::align::parse_file(&perf_path).unwrap();
+                    let merged_with_perf = MergedNetwork::from_alignment(&g1, &g2, &alignment, Some(&perfect), &monitor).unwrap();
+                    let perfect_merged = MergedNetwork::from_alignment(&g1, &g2, &perfect, Some(&perfect), &monitor).unwrap();
+                    let full_scores = biofabric_core::alignment::scoring::AlignmentScores::with_full_evaluation(
+                        &merged_with_perf,
+                        &perfect_merged,
+                        &monitor,
+                    );
+
+                    scores_content.clear();
+                    scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", full_scores.ec));
+                    scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", full_scores.s3));
+                    scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", full_scores.ics));
+                    if let Some(nc) = full_scores.nc {
+                        scores_content.push_str(&format!("networkAlignment.nodeCorrectness\t{:.10}\n", nc));
+                    }
+                    if let Some(ngs) = full_scores.ngs {
+                        scores_content.push_str(&format!("networkAlignment.nodeGroupSimilarity\t{:.10}\n", ngs));
+                    }
+                    if let Some(lgs) = full_scores.lgs {
+                        scores_content.push_str(&format!("networkAlignment.linkGroupSimilarity\t{:.10}\n", lgs));
+                    }
+                    if let Some(js) = full_scores.js {
+                        scores_content.push_str(&format!("networkAlignment.jaccardSimilarity\t{:.10}\n", js));
+                    }
+                }
+            }
+
+            std::fs::write(golden_path.join("output.scores"), &scores_content).unwrap();
+        }
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
     eprintln!("\nGolden generation complete: {} generated, {} skipped (already exist or input missing)", generated, skipped);
 }
 
