@@ -747,7 +747,8 @@ if no_only_filter || $ONLY_ALIGN; then
             "$NETWORKS_DIR/align:/align:ro" \
             -- \
             "/networks/align_net1.sif" "/goldens" \
-            --align "/networks/align_net2.sif" "/align/test_perfect.align" || rc=$?
+            --align "/networks/align_net2.sif" "/align/test_perfect.align" \
+            --perfect-align "/align/test_perfect.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
 
@@ -819,7 +820,8 @@ if no_only_filter || $ONLY_ALIGN; then
             -- \
             "/networks/CaseStudy-IV-SmallYeast.gw" "/goldens" \
             --align "/networks/CaseStudy-IV-LargeYeast.gw" "/align/casestudy_iv.align" \
-            --view-type orphan || rc=$?
+            --view-type orphan \
+            --perfect-align "/align/casestudy_iv.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
 
@@ -831,7 +833,8 @@ if no_only_filter || $ONLY_ALIGN; then
             -- \
             "/networks/Yeast2KReduced.sif" "/goldens" \
             --align "/networks/SC.sif" "/align/yeast_sc_perfect.align" \
-            --view-type orphan || rc=$?
+            --view-type orphan \
+            --perfect-align "/align/yeast_sc_perfect.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
 
@@ -843,7 +846,8 @@ if no_only_filter || $ONLY_ALIGN; then
             -- \
             "/networks/Yeast2KReduced.sif" "/goldens" \
             --align "/networks/SC.sif" "/align/yeast_sc_s3_pure.align" \
-            --view-type orphan || rc=$?
+            --view-type orphan \
+            --perfect-align "/align/yeast_sc_perfect.align" || rc=$?
         if [ "$rc" -eq 0 ]; then OK=$((OK + 1));
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi

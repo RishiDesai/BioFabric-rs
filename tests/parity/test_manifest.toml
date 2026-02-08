@@ -1528,7 +1528,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "align_net2.sif"
 align_file = "test_perfect.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "test_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "p15"]
 
 [[test]]
@@ -1540,6 +1541,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "align_net2.sif"
 align_file = "test_partial.align"
+# Note: no perfect_align — JaccardSimilarity NPEs when the main alignment
+# is partial (unmapped nodes cause null findMatch in jaccSimDecision).
 compare = ["noa", "eda", "bif"]
 tags = ["alignment", "p15"]
 
@@ -1563,7 +1566,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "casestudy_iv.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "p16"]
 
 # --- Case Studies I-III: Yeast2KReduced vs SC (SIF + SIF, 2379-node alignment) ---
@@ -1577,7 +1581,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_perfect.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
 [[test]]
@@ -1589,7 +1594,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_pure.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
 [[test]]
@@ -1601,7 +1607,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_importance_pure.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
 [[test]]
@@ -1613,7 +1620,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_050.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16"]
 
 # --- Additional DesaiEtAl-2019 Case Study III alignment blends ---
@@ -1628,7 +1636,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_001.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 [[test]]
@@ -1640,7 +1649,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_003.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 [[test]]
@@ -1652,7 +1662,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_005.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 [[test]]
@@ -1664,7 +1675,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_010.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 [[test]]
@@ -1676,7 +1688,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_030.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 [[test]]
@@ -1688,7 +1701,8 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_100.align"
-compare = ["noa", "eda", "bif"]
+perfect_align = "yeast_sc_perfect.align"
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "realistic", "stress", "p16", "desai_blend"]
 
 # --- BIF round-trip with populated annotations (DesaiEtAl publication files) ---
@@ -1765,8 +1779,9 @@ layout = "alignment"
 shadows = true
 align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
+perfect_align = "casestudy_iv.align"
 view_type = "orphan"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "orphan", "p17"]
 
 [[test]]
@@ -1778,8 +1793,9 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_perfect.align"
+perfect_align = "yeast_sc_perfect.align"
 view_type = "orphan"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "orphan", "realistic", "p17"]
 
 [[test]]
@@ -1791,8 +1807,9 @@ layout = "alignment"
 shadows = true
 align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_pure.align"
+perfect_align = "yeast_sc_perfect.align"
 view_type = "orphan"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "orphan", "realistic", "p17"]
 
 # --- ViewType.CYCLE: highlights incorrect alignments via cycle/path detection ---
@@ -1808,7 +1825,7 @@ align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 view_type = "cycle"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "cycle", "p17"]
 
 [[test]]
@@ -1822,7 +1839,7 @@ align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 view_type = "cycle"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "cycle", "noshadow", "p17"]
 
 [[test]]
@@ -1836,7 +1853,7 @@ align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 view_type = "cycle"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "cycle", "realistic", "p17"]
 
 # --- PerfectNGMode variants: node group computation modes ---
@@ -1852,7 +1869,7 @@ align_net2 = "SC.sif"
 align_file = "yeast_sc_perfect.align"
 perfect_align = "yeast_sc_perfect.align"
 ng_mode = "node_correctness"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "ng_mode", "realistic", "p17"]
 
 [[test]]
@@ -1866,7 +1883,7 @@ align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 ng_mode = "node_correctness"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "ng_mode", "realistic", "p17"]
 
 [[test]]
@@ -1881,7 +1898,7 @@ align_file = "yeast_sc_perfect.align"
 perfect_align = "yeast_sc_perfect.align"
 ng_mode = "jaccard_similarity"
 jacc_threshold = 0.75
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "ng_mode", "realistic", "p17"]
 
 [[test]]
@@ -1895,5 +1912,5 @@ align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 ng_mode = "node_correctness"
-compare = ["noa", "eda", "bif"]
+compare = ["noa", "eda", "bif", "scores"]
 tags = ["alignment", "ng_mode", "p17"]
