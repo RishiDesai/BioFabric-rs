@@ -395,6 +395,7 @@ impl NodeClusterEdgeLayout {
                 ll.is_shadow,
             );
             new_ll.column_no_shadows = column_no_shadows;
+            new_ll.color_index = column;
 
             // Update node spans
             if let Some(src_layout) = layout.nodes.get_mut(&ll.source) {
