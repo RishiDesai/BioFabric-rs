@@ -223,6 +223,20 @@ pub struct RenderOutput {
 }
 
 impl RenderOutput {
+    /// Create an empty render output (no instances).
+    ///
+    /// Useful as a placeholder when the full render extraction pipeline
+    /// is not yet implemented, or when exporting a background-only image.
+    pub fn empty() -> Self {
+        Self {
+            node_annotations: RectBatch::new(),
+            link_annotations: RectBatch::new(),
+            links: LineBatch::with_capacity(0),
+            nodes: LineBatch::with_capacity(0),
+            labels: TextBatch::new(),
+        }
+    }
+
     /// Extract visible instances from a computed layout.
     ///
     /// Performs viewport culling and LOD filtering, then packs the

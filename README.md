@@ -47,40 +47,50 @@ biofabric-rs/
 | Module | Status | Description |
 |--------|--------|-------------|
 | `model` | Complete | Network, Node, Link, Annotation types |
-| `io::sif` | Stub | SIF file parser |
-| `io::gw` | Stub | GW (LEDA) file parser |
-| `io::align` | Stub | .align file parser |
+| `io::sif` | Complete | SIF file parser/writer |
+| `io::gw` | Complete | GW (LEDA) file parser/writer |
+| `io::align` | Complete | .align file parser |
 | `io::json` | Complete | JSON import/export |
-| `io::xml` | Stub | BioFabric XML session format |
-| `layout::default` | Stub | Default BFS layout |
+| `io::xml` | Complete | BioFabric XML session format |
+| `io::order` | Complete | Node/link order import/export |
+| `io::attribute` | Stub | Node attribute loader (TSV) |
+| `layout::default` | Complete | Default BFS node layout + edge layout |
 | `layout::similarity` | Stub | Node similarity (Jaccard) layout |
-| `layout::hierarchy` | Stub | Hierarchical DAG layout |
+| `layout::hierarchy` | Complete | Hierarchical DAG layout |
 | `layout::cluster` | Stub | Node cluster layout |
-| `layout::control_top` | Stub | Control-top layout |
+| `layout::control_top` | Complete | Control-top layout |
 | `layout::set` | Stub | Set membership layout |
 | `layout::world_bank` | Stub | Hub-spoke layout |
 | `alignment::types` | Complete | NodeColor, EdgeType, MergedNodeId |
-| `alignment::merge` | Stub | Network merging via alignment |
-| `alignment::scoring` | Stub | EC, S3, ICS, NC, NGS, LGS, JS |
-| `alignment::groups` | Stub | Node group classification |
-| `alignment::cycle` | Stub | Alignment cycle/path detection |
-| `alignment::layout` | Stub | GROUP, ORPHAN, CYCLE layout modes |
-| `analysis::graph` | Stub | BFS, DFS, connected components |
-| `analysis::cycle` | Stub | Cycle detection in directed graphs |
-| `render::color` | Stub | Color palette generation |
-| `render::bucket` | Stub | Bucket renderer for dense views |
-| `render::tiles` | Stub | Tile-based rendering |
+| `alignment::merge` | Complete | Network merging via alignment |
+| `alignment::scoring` | Complete | EC, S3, ICS, NC, NGS, LGS, JS |
+| `alignment::groups` | Complete | Node group classification |
+| `alignment::cycle` | Complete | Alignment cycle/path detection |
+| `alignment::layout` | Complete | GROUP, ORPHAN, CYCLE layout modes |
+| `analysis::graph` | Complete | BFS, DFS, connected components |
+| `analysis::cycle` | Complete | Cycle detection in directed graphs |
+| `render::color` | Complete | Color palette generation |
+| `render::gpu_data` | Partial | Render extraction (extraction stub) |
+| `export::image` | Partial | Image export (background-only) |
 | `util::quadtree` | Stub | Spatial indexing |
 
 ### CLI
 
+All subcommands are wired and functional. Run `biofabric --help` for full usage.
+
 ```
-biofabric layout  <input> [--algorithm default|similarity|...] [--output layout.json]
-biofabric render  <input> [--width 1920] [--height 1080] [--output image.png]
-biofabric info    <input>
-biofabric convert <input> --format sif|gw|json
-biofabric align   <g1> <g2> <alignment.align> [--layout group|orphan|cycle] [--score]
+biofabric layout        <input>  [--algorithm default|similarity|...] [-o layout.json]
+biofabric render        <input>  [--width 1920] [--height 0] [-o output.png]
+biofabric info          <input>  [--all] [--format text|json]
+biofabric convert       <input>  --format sif|gw|json|xml [-o output]
+biofabric align         <g1> <g2> <align> [--layout group|orphan|cycle] [--score] [--json]
+biofabric compare       <input>  <nodeA> <nodeB> [--format text|json]
+biofabric extract       <input>  --node <center> [--hops N] [-o output]
+biofabric export-order  <input>  [--what nodes|links] [-o output]
+biofabric search        <input>  <pattern> [--regex] [-i] [--target nodes|relations|both]
 ```
+
+Global flag: `--quiet` suppresses non-essential stderr output.
 
 ### Web App
 
