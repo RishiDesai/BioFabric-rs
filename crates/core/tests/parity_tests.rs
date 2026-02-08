@@ -47,6 +47,9 @@ use biofabric_core::layout::traits::{EdgeLayout, LayoutMode, LayoutParams, NodeL
 use biofabric_core::layout::result::NetworkLayout;
 use biofabric_core::model::{Network, NodeId};
 use biofabric_core::worker::NoopMonitor;
+use biofabric_core::alignment::layout::{AlignmentEdgeLayout, AlignmentLayoutMode, AlignmentNodeLayout};
+use biofabric_core::alignment::merge::MergedNetwork;
+use biofabric_core::alignment::groups::NodeGroupMap;
 
 // ---------------------------------------------------------------------------
 // Test infrastructure
@@ -487,6 +490,65 @@ fn noa_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("noa").join(filename)
 }
 
+/// Path to an alignment file.
+fn align_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("align").join(filename)
+}
+
+/// Run alignment layout: merge two networks using an alignment, then lay out.
+fn run_alignment_layout(
+    g1: &Network,
+    g2: &Network,
+    align_file: &str,
+    mode: AlignmentLayoutMode,
+) -> NetworkLayout {
+    let monitor = NoopMonitor;
+
+    // Parse alignment file
+    let align_path = align_file_path(align_file);
+    assert!(
+        align_path.exists(),
+        "Alignment file not found: {}",
+        align_path.display()
+    );
+    let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
+
+    // Merge networks
+    let merged = MergedNetwork::from_alignment(g1, g2, &alignment, None, &monitor).unwrap();
+
+    // Build node groups for GROUP mode
+    let groups = NodeGroupMap::from_merged(&merged, &monitor);
+
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        link_groups: Some(
+            biofabric_core::alignment::layout::AlignmentEdgeLayout::alignment_link_group_order(),
+        ),
+        ..Default::default()
+    };
+
+    // Node layout
+    let node_layout = AlignmentNodeLayout::new(merged.clone(), mode).with_groups(groups);
+    let node_order = node_layout
+        .layout_nodes(&merged.network, &params, &monitor)
+        .unwrap();
+
+    // Edge layout
+    let has_shadows = merged.network.has_shadows();
+    let mut build_data = LayoutBuildData::new(
+        merged.network.clone(),
+        node_order,
+        has_shadows,
+        LayoutMode::PerNode,
+    );
+
+    let edge_layout = AlignmentEdgeLayout::new(mode);
+    edge_layout
+        .layout_edges(&mut build_data, &params, &monitor)
+        .unwrap()
+}
+
 /// Extract a subnetwork from a loaded network using the specified node names.
 ///
 /// Filters the network to include only the named nodes and edges where
@@ -590,8 +652,25 @@ fn run_noa_test(cfg: &ParityConfig) {
         network = extract_subnetwork(&network, extract_nodes);
     }
 
-    // P11: Fixed node-order import — use imported order instead of BFS
-    let layout = if cfg.layout == "hierdag" {
+    // Alignment layout dispatch
+    let layout = if cfg.layout == "alignment" {
+        let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
+        let align_file = cfg.align_file.expect("alignment tests require align_file");
+        let g2_path = network_path(net2_file);
+        assert!(g2_path.exists(), "G2 network not found: {}", g2_path.display());
+        let g2 = load_network(&g2_path);
+
+        // Determine alignment mode from golden dirname
+        let mode = if cfg.golden_dirname.contains("orphan") {
+            AlignmentLayoutMode::Orphan
+        } else if cfg.golden_dirname.contains("cycle") {
+            AlignmentLayoutMode::Cycle
+        } else {
+            AlignmentLayoutMode::Group
+        };
+
+        run_alignment_layout(&network, &g2, align_file, mode)
+    } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
             include_shadows: true,
@@ -667,7 +746,23 @@ fn run_eda_test(cfg: &ParityConfig) {
     }
 
     // Choose the appropriate layout strategy
-    let layout = if cfg.layout == "hierdag" {
+    let layout = if cfg.layout == "alignment" {
+        let net2_file = cfg.align_net2.expect("alignment tests require align_net2");
+        let align_file = cfg.align_file.expect("alignment tests require align_file");
+        let g2_path = network_path(net2_file);
+        assert!(g2_path.exists(), "G2 network not found: {}", g2_path.display());
+        let g2 = load_network(&g2_path);
+
+        let mode = if cfg.golden_dirname.contains("orphan") {
+            AlignmentLayoutMode::Orphan
+        } else if cfg.golden_dirname.contains("cycle") {
+            AlignmentLayoutMode::Cycle
+        } else {
+            AlignmentLayoutMode::Group
+        };
+
+        run_alignment_layout(&network, &g2, align_file, mode)
+    } else if cfg.layout == "hierdag" {
         // P6: HierDAG layout
         let mut params = LayoutParams {
             include_shadows: true,
@@ -1835,6 +1930,142 @@ fn generate_goldens() {
         std::fs::create_dir_all(&golden_path).unwrap();
         std::fs::write(&noa_path, &noa_content).unwrap();
         std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        eprintln!(
+            "  {} : {} NOA lines, {} EDA lines",
+            golden_dirname,
+            noa_content.lines().count(),
+            eda_content.lines().count()
+        );
+        generated += 1;
+    }
+
+    // ---- Alignment layout goldens ----
+    let align_cases: Vec<(&str, &str, &str, &str, &str)> = vec![
+        // (g1_file, g2_file, align_file, golden_dirname, mode_hint)
+        ("align_net1.sif", "align_net2.sif", "test_perfect.align", "align_perfect", "group"),
+        ("align_net1.sif", "align_net2.sif", "test_partial.align", "align_partial", "group"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_importance_pure.align", "align_yeast_sc_importance_pure", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_050.align", "align_yeast_sc_s3_050", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_001.align", "align_yeast_sc_s3_001", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_003.align", "align_yeast_sc_s3_003", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_005.align", "align_yeast_sc_s3_005", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_010.align", "align_yeast_sc_s3_010", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_030.align", "align_yeast_sc_s3_030", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_100.align", "align_yeast_sc_s3_100", "group"),
+        // Orphan variants
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_orphan", "orphan"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_orphan", "orphan"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_orphan", "orphan"),
+        // Cycle variants
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_cycle", "cycle"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_cycle_noshadow", "cycle"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_cycle", "cycle"),
+        // NG variants (same as group but with NG mode)
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_nc", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_ng_nc", "group"),
+        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_jacc", "group"),
+        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_ng_nc", "group"),
+    ];
+
+    for (g1_file, g2_file, align_file_name, golden_dirname, mode_hint) in &align_cases {
+        let g1_path = network_path(g1_file);
+        let g2_path = network_path(g2_file);
+        let align_path = parity_root().join("networks").join("align").join(align_file_name);
+
+        if !g1_path.exists() || !g2_path.exists() || !align_path.exists() {
+            eprintln!("SKIP: alignment input not found for {}", golden_dirname);
+            skipped += 1;
+            continue;
+        }
+
+        let golden_path = golden_dir(golden_dirname);
+        let noa_path = golden_path.join("output.noa");
+        if noa_path.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        eprintln!("Generating golden (alignment): {} -> {}", align_file_name, golden_dirname);
+
+        let g1 = load_network(&g1_path);
+        let g2 = load_network(&g2_path);
+
+        let mode = match *mode_hint {
+            "orphan" => AlignmentLayoutMode::Orphan,
+            "cycle" => AlignmentLayoutMode::Cycle,
+            _ => AlignmentLayoutMode::Group,
+        };
+
+        let layout = run_alignment_layout(&g1, &g2, align_file_name, mode);
+
+        let noa_content = format_noa(&layout);
+        let eda_content = format_eda(&layout);
+
+        std::fs::create_dir_all(&golden_path).unwrap();
+        std::fs::write(&noa_path, &noa_content).unwrap();
+        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
+
+        // Also generate scores file for scoring tests
+        {
+            let monitor = NoopMonitor;
+            let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
+            let merged = MergedNetwork::from_alignment(&g1, &g2, &alignment, None, &monitor).unwrap();
+            let scores = biofabric_core::alignment::scoring::AlignmentScores::topological(&merged, &monitor);
+
+            let mut scores_content = String::new();
+            scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", scores.ec));
+            scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", scores.s3));
+            scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", scores.ics));
+
+            // If we can compute evaluation metrics, add them too
+            // For now, try to find a perfect alignment
+            let perfect_align_name = if *golden_dirname == "align_casestudy_iv" {
+                Some(*align_file_name)
+            } else if golden_dirname.starts_with("align_yeast_sc_") {
+                Some("yeast_sc_perfect.align")
+            } else if *golden_dirname == "align_perfect" || *golden_dirname == "align_partial" {
+                Some("test_perfect.align")
+            } else {
+                None
+            };
+
+            if let Some(perf_name) = perfect_align_name {
+                let perf_path = parity_root().join("networks").join("align").join(perf_name);
+                if perf_path.exists() {
+                    let perfect = biofabric_core::io::align::parse_file(&perf_path).unwrap();
+                    let merged_with_perf = MergedNetwork::from_alignment(&g1, &g2, &alignment, Some(&perfect), &monitor).unwrap();
+                    let perfect_merged = MergedNetwork::from_alignment(&g1, &g2, &perfect, Some(&perfect), &monitor).unwrap();
+                    let full_scores = biofabric_core::alignment::scoring::AlignmentScores::with_full_evaluation(
+                        &merged_with_perf,
+                        &perfect_merged,
+                        &monitor,
+                    );
+
+                    scores_content.clear();
+                    scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", full_scores.ec));
+                    scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", full_scores.s3));
+                    scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", full_scores.ics));
+                    if let Some(nc) = full_scores.nc {
+                        scores_content.push_str(&format!("networkAlignment.nodeCorrectness\t{:.10}\n", nc));
+                    }
+                    if let Some(ngs) = full_scores.ngs {
+                        scores_content.push_str(&format!("networkAlignment.nodeGroupSimilarity\t{:.10}\n", ngs));
+                    }
+                    if let Some(lgs) = full_scores.lgs {
+                        scores_content.push_str(&format!("networkAlignment.linkGroupSimilarity\t{:.10}\n", lgs));
+                    }
+                    if let Some(js) = full_scores.js {
+                        scores_content.push_str(&format!("networkAlignment.jaccardSimilarity\t{:.10}\n", js));
+                    }
+                }
+            }
+
+            std::fs::write(golden_path.join("output.scores"), &scores_content).unwrap();
+        }
 
         eprintln!(
             "  {} : {} NOA lines, {} EDA lines",

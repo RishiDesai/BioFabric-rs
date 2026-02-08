@@ -35,18 +35,44 @@ pub fn parse_file(path: &Path) -> Result<AlignmentMap, ParseError> {
 }
 
 /// Parse an alignment file from any reader.
-pub fn parse_reader<R: Read>(_reader: BufReader<R>) -> Result<AlignmentMap, ParseError> {
-    // TODO: Implement alignment file parsing
-    //
-    // Algorithm:
-    // 1. Read line by line
-    // 2. Skip empty lines and comment lines (starting with #)
-    // 3. Split each line by whitespace (tab or space)
-    // 4. Expect exactly 2 tokens per line: g1_node g2_node
-    // 5. Build HashMap<NodeId, NodeId> mapping g1 -> g2
-    // 6. Check for duplicate g1 entries (each g1 node maps to exactly one g2 node)
-    //
-    todo!("Implement .align parser")
+pub fn parse_reader<R: Read>(reader: BufReader<R>) -> Result<AlignmentMap, ParseError> {
+    let mut map = AlignmentMap::new();
+
+    for (line_num, line_result) in reader.lines().enumerate() {
+        let line = line_result?;
+        let trimmed = line.trim();
+
+        // Skip empty lines and comment lines
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Split by whitespace (tab or space)
+        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+        if tokens.len() != 2 {
+            return Err(ParseError::InvalidFormat {
+                line: line_num + 1,
+                message: format!(
+                    "Expected 2 tokens (g1_node g2_node), got {}",
+                    tokens.len()
+                ),
+            });
+        }
+
+        let g1 = NodeId::new(tokens[0]);
+        let g2 = NodeId::new(tokens[1]);
+
+        if map.contains_key(&g1) {
+            return Err(ParseError::InvalidFormat {
+                line: line_num + 1,
+                message: format!("Duplicate G1 node: {}", tokens[0]),
+            });
+        }
+
+        map.insert(g1, g2);
+    }
+
+    Ok(map)
 }
 
 /// Parse an alignment string directly.
