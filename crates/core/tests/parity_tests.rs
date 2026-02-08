@@ -500,6 +500,148 @@ fn noa_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("noa").join(filename)
 }
 
+/// Path to an EDA file for fixed link order import.
+fn eda_file_path(filename: &str) -> PathBuf {
+    parity_root().join("networks").join("eda").join(filename)
+}
+
+/// Parse an EDA format file and return the link ordering.
+///
+/// The EDA file format specifies a column for each link:
+///   - Non-shadow: `SOURCE (RELATION) TARGET = COLUMN`
+///   - Shadow: `SOURCE shdw(RELATION) TARGET = COLUMN`
+///
+/// Returns a Vec of (source, target, relation, is_shadow, column) sorted by column.
+fn parse_eda_format_file(path: &std::path::Path) -> Vec<(String, String, String, bool, usize)> {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("Failed to read EDA file {}: {}", path.display(), e));
+    let mut entries: Vec<(String, String, String, bool, usize)> = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "Link Column" {
+            continue;
+        }
+        if let Some((link_spec, col_str)) = trimmed.rsplit_once(" = ") {
+            let col: usize = col_str.parse()
+                .unwrap_or_else(|e| panic!("Invalid column in EDA: '{}': {}", trimmed, e));
+
+            // Parse link spec: "A (pp) B" or "A shdw(pp) B"
+            let is_shadow = link_spec.contains(" shdw(");
+            if is_shadow {
+                // Format: "SOURCE shdw(RELATION) TARGET"
+                if let Some((source, rest)) = link_spec.split_once(" shdw(") {
+                    if let Some((relation, target)) = rest.split_once(") ") {
+                        entries.push((source.to_string(), target.to_string(), relation.to_string(), true, col));
+                    }
+                }
+            } else {
+                // Format: "SOURCE (RELATION) TARGET"
+                if let Some((source, rest)) = link_spec.split_once(" (") {
+                    if let Some((relation, target)) = rest.split_once(") ") {
+                        entries.push((source.to_string(), target.to_string(), relation.to_string(), false, col));
+                    }
+                }
+            }
+        }
+    }
+    entries.sort_by_key(|(_, _, _, _, col)| *col);
+    entries
+}
+
+/// Run layout with a fixed link order from an EDA file.
+///
+/// This replicates Java's LINK_ATTRIB_LAYOUT BuildMode:
+/// 1. Run the default node layout (BFS order) to get node rows
+/// 2. Apply the EDA-specified link ordering instead of the default edge layout
+fn run_layout_with_link_order(network: &Network, eda_path: &std::path::Path) -> NetworkLayout {
+    let monitor = NoopMonitor;
+    let params = LayoutParams {
+        include_shadows: true,
+        layout_mode: LayoutMode::PerNode,
+        ..Default::default()
+    };
+
+    // Step 1: Default node layout (BFS)
+    let node_layout = DefaultNodeLayout::new();
+    let node_order = node_layout.layout_nodes(network, &params, &monitor).unwrap();
+
+    // Build node-to-row map
+    let node_to_row: HashMap<NodeId, usize> = node_order.iter().enumerate()
+        .map(|(row, id)| (id.clone(), row))
+        .collect();
+
+    // Step 2: Parse EDA file
+    let eda_entries = parse_eda_format_file(eda_path);
+
+    // Step 3: Build layout from the fixed link order
+    let mut layout = NetworkLayout::with_capacity(node_order.len(), eda_entries.len());
+    layout.row_count = node_order.len();
+
+    // Initialize node layouts
+    for (i, node_id) in node_order.iter().enumerate() {
+        let mut nl = biofabric_core::layout::result::NodeLayout::new(i, node_id.as_str());
+        nl.color_index = i;
+        layout.nodes.insert(node_id.clone(), nl);
+    }
+
+    // Build link layouts from EDA entries
+    // The EDA specifies the SHADOW column order. Non-shadow links also have
+    // a non-shadow column counter.
+    let mut ns_col = 0usize; // non-shadow column counter
+    for (source, target, relation, is_shadow, shadow_col) in &eda_entries {
+        let src_id = NodeId::new(source.as_str());
+        let tgt_id = NodeId::new(target.as_str());
+
+        // In Rust, shadow links have FLIPPED source/target
+        let (ll_src, ll_tgt) = if *is_shadow {
+            (tgt_id.clone(), src_id.clone())
+        } else {
+            (src_id.clone(), tgt_id.clone())
+        };
+
+        let src_row = node_to_row[&ll_src];
+        let tgt_row = node_to_row[&ll_tgt];
+
+        let mut ll = biofabric_core::layout::result::LinkLayout::new(
+            *shadow_col,
+            ll_src.clone(),
+            ll_tgt.clone(),
+            src_row,
+            tgt_row,
+            relation.clone(),
+            *is_shadow,
+        );
+        ll.color_index = *shadow_col;
+
+        if !is_shadow {
+            ll.column_no_shadows = Some(ns_col);
+            // Update node non-shadow spans
+            if let Some(nl) = layout.nodes.get_mut(&ll_src) {
+                nl.update_span_no_shadows(ns_col);
+            }
+            if let Some(nl) = layout.nodes.get_mut(&ll_tgt) {
+                nl.update_span_no_shadows(ns_col);
+            }
+            ns_col += 1;
+        }
+
+        // Update node shadow spans
+        if let Some(nl) = layout.nodes.get_mut(&ll_src) {
+            nl.update_span(*shadow_col);
+        }
+        if let Some(nl) = layout.nodes.get_mut(&ll_tgt) {
+            nl.update_span(*shadow_col);
+        }
+
+        layout.links.push(ll);
+    }
+
+    layout.column_count = eda_entries.len();
+    layout.column_count_no_shadows = ns_col;
+
+    layout
+}
+
 /// Path to an alignment file.
 fn align_file_path(filename: &str) -> PathBuf {
     parity_root().join("networks").join("align").join(filename)
@@ -1131,7 +1273,7 @@ fn run_bif_test(cfg: &ParityConfig) {
 
         // P12: Subnetwork extraction — uses full layout + compress approach
         // (must be done after layout, not before)
-        let (mut network, extract_layout) = if let Some(extract_nodes) = cfg.extract_nodes {
+        let (network, extract_layout) = if let Some(extract_nodes) = cfg.extract_nodes {
             // First do the full layout, then extract/compress
             let full_layout = run_default_layout(&network);
             let (sub_net, sub_layout) = extract_submodel(&network, &full_layout, extract_nodes);
@@ -1187,6 +1329,11 @@ fn run_bif_test(cfg: &ParityConfig) {
             assert!(noa_path.exists(), "NOA file not found: {}", noa_path.display());
             let node_order = parse_noa_format_file(&noa_path);
             run_layout_with_node_order(&network, node_order)
+        } else if let Some(eda_file) = cfg.eda_file {
+            // P11: Fixed link-order import from EDA file
+            let eda_path = eda_file_path(eda_file);
+            assert!(eda_path.exists(), "EDA file not found: {}", eda_path.display());
+            run_layout_with_link_order(&network, &eda_path)
         } else if let Some(link_groups) = cfg.link_groups {
             let mode = match cfg.group_mode {
                 Some("per_node") => LayoutMode::PerNode,
