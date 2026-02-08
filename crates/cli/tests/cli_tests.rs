@@ -4,6 +4,7 @@
 //! and basic smoke runs. They intentionally do NOT duplicate the core
 //! algorithm tests — those live in `crates/core/tests/`.
 
+#[allow(deprecated)]
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
@@ -23,6 +24,7 @@ fn test_align(name: &str) -> String {
 }
 
 /// Helper: build the biofabric command.
+#[allow(deprecated)]
 fn biofabric() -> Command {
     Command::cargo_bin("biofabric").expect("binary should exist")
 }

@@ -102,18 +102,16 @@ pub fn run(args: InfoArgs) -> Result<(), Box<dyn std::error::Error>> {
                 "relation_types": relation_types,
             });
 
-            if args.degree_distribution || show_all {
-                if !degrees.is_empty() {
-                    let min = degrees.iter().copied().min().unwrap_or(0);
-                    let max = degrees.iter().copied().max().unwrap_or(0);
-                    let sum: usize = degrees.iter().sum();
-                    let mean = sum as f64 / degrees.len() as f64;
-                    info["degree_distribution"] = serde_json::json!({
-                        "min": min,
-                        "max": max,
-                        "mean": mean,
-                    });
-                }
+            if (args.degree_distribution || show_all) && !degrees.is_empty() {
+                let min = degrees.iter().copied().min().unwrap_or(0);
+                let max = degrees.iter().copied().max().unwrap_or(0);
+                let sum: usize = degrees.iter().sum();
+                let mean = sum as f64 / degrees.len() as f64;
+                info["degree_distribution"] = serde_json::json!({
+                    "min": min,
+                    "max": max,
+                    "mean": mean,
+                });
             }
 
             if args.components || show_all {
