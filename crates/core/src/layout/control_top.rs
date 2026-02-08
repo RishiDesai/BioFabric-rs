@@ -578,11 +578,13 @@ impl NodeLayout for ControlTopLayout {
         // Compute degree from non-shadow links
         let degree = Self::compute_degree(network);
 
-        // Find or use provided control nodes
-        let ctrl_set: HashSet<NodeId> = if self.config.control_order == ControlOrder::FixedList
-            && !self.config.control_nodes.is_empty()
-        {
-            self.config.control_nodes.iter().cloned().collect()
+        // For FixedList mode: the control set is ALL source nodes (same as other modes),
+        // not just the user-specified subset. The fixed list specifies the ORDER of some
+        // control nodes; remaining control nodes are appended in natural (sorted) order.
+        // For other modes with explicit control_nodes: use only the specified set.
+        let ctrl_set: HashSet<NodeId> = if self.config.control_order == ControlOrder::FixedList {
+            // Java: controlNodes() collects getSrcNode() from all links
+            Self::find_control_nodes(network)
         } else if !self.config.control_nodes.is_empty() {
             // If control_nodes provided but not FixedList mode, use them as the set
             self.config.control_nodes.iter().cloned().collect()
@@ -610,8 +612,18 @@ impl NodeLayout for ControlTopLayout {
                 Self::control_sort_partial_order(network, &ctrl_set, &dfo, &degree)
             }
             ControlOrder::FixedList => {
-                // Use the provided order directly
-                self.config.control_nodes.clone()
+                // Start with the user-specified order, then append remaining
+                // control nodes in sorted order (matching Java's TreeSet<NetNode>).
+                let mut list = self.config.control_nodes.clone();
+                let fixed_set: HashSet<NodeId> = list.iter().cloned().collect();
+                let mut remaining: Vec<NodeId> = ctrl_set
+                    .iter()
+                    .filter(|n| !fixed_set.contains(n))
+                    .cloned()
+                    .collect();
+                remaining.sort(); // TreeSet natural order = name ascending
+                list.extend(remaining);
+                list
             }
             ControlOrder::IntraDegree => {
                 // Order by intra-control-set link degree
