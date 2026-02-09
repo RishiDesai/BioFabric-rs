@@ -1,6 +1,6 @@
 # BioFabric-rs
 
-A Rust rewrite of [BioFabric](https://github.com/wjrl/BioFabric) and the [VISNAB](https://doi.org/10.1007/978-3-030-57173-3_4) alignment plugin. Provides both a CLI tool and an interactive web application for visualizing networks with millions of nodes and edges.
+A Rust rewrite of [BioFabric](https://github.com/wjrl/BioFabric) and the [VISNAB](https://github.com/wjrl/AlignmentPlugin) network alignment plugin. This project aims to provide a high-performance, memory-efficient implementation of BioFabric's visualization techniques, currently focusing on a robust core library and a feature-rich command-line interface.
 
 ## Overview
 
@@ -14,7 +14,7 @@ This eliminates the "hairball" problem of traditional node-link diagrams and sca
 
 ## Project Structure
 
-Cargo workspace with three crates plus a TypeScript web frontend:
+This is a Cargo workspace containing the following crates:
 
 ```
 biofabric-rs/
@@ -24,23 +24,18 @@ biofabric-rs/
 │   │       ├── model/     # Network, Node, Link, Annotation
 │   │       ├── io/        # Parsers: SIF, GW, .align, JSON, XML
 │   │       ├── layout/    # 7 layout algorithms + traits
-│   │       ├── alignment/ # Network alignment (native, not plugin)
+│   │       ├── alignment/ # Network alignment
 │   │       ├── analysis/  # BFS, DFS, components, cycles
 │   │       ├── render/    # Colors, bucket renderer, tiles
 │   │       └── util/      # Quadtree, data helpers
 │   ├── cli/               # biofabric-cli   — command-line tool
-│   └── wasm/              # biofabric-wasm  — WebAssembly bindings
-├── web/                   # TypeScript + Vite + WebGL2 frontend
-│   └── src/
-│       ├── renderer/      # WebGL2 instanced line rendering
-│       ├── ui/            # App shell, controls, file loading, search
-│       └── wasm/          # WASM bridge (typed API)
-├── BioFabric/             # Reference: original Java implementation
-├── AlignmentPlugin/       # Reference: VISNAB Java plugin
-└── SANA/                  # Reference: network alignment tool
+│   └── wasm/              # biofabric-wasm  — WebAssembly bindings (In Progress)
+├── web/                   # Web frontend (Planned)
 ```
 
 ## Module Status
+
+The current implementation focuses on the `core` library and `cli` tool.
 
 ### Core Library
 
@@ -55,12 +50,12 @@ biofabric-rs/
 | `io::order` | Complete | Node/link order import/export |
 | `io::attribute` | Stub | Node attribute loader (TSV) |
 | `layout::default` | Complete | Default BFS node layout + edge layout |
-| `layout::similarity` | Stub | Node similarity (Jaccard) layout |
+| `layout::similarity` | Complete | Node similarity (Jaccard) layout |
 | `layout::hierarchy` | Complete | Hierarchical DAG layout |
-| `layout::cluster` | Stub | Node cluster layout |
+| `layout::cluster` | Complete | Node cluster layout |
 | `layout::control_top` | Complete | Control-top layout |
-| `layout::set` | Stub | Set membership layout |
-| `layout::world_bank` | Stub | Hub-spoke layout |
+| `layout::set` | Complete | Set membership layout |
+| `layout::world_bank` | Complete | Hub-spoke layout |
 | `alignment::types` | Complete | NodeColor, EdgeType, MergedNodeId |
 | `alignment::merge` | Complete | Network merging via alignment |
 | `alignment::scoring` | Complete | EC, S3, ICS, NC, NGS, LGS, JS |
@@ -70,13 +65,13 @@ biofabric-rs/
 | `analysis::graph` | Complete | BFS, DFS, connected components |
 | `analysis::cycle` | Complete | Cycle detection in directed graphs |
 | `render::color` | Complete | Color palette generation |
-| `render::gpu_data` | Partial | Render extraction (extraction stub) |
-| `export::image` | Partial | Image export (background-only) |
+| `render::gpu_data` | Complete | Render data extraction for GPU/WebGL |
+| `export::image` | Complete | Image export (PNG, JPEG, TIFF) |
 | `util::quadtree` | Stub | Spatial indexing |
 
 ### CLI
 
-All subcommands are wired and functional. Run `biofabric --help` for full usage.
+The `biofabric-cli` provides a comprehensive suite of tools for working with BioFabric networks.
 
 ```
 biofabric layout        <input>  [--algorithm default|similarity|...] [-o layout.json]
@@ -92,9 +87,47 @@ biofabric search        <input>  <pattern> [--regex] [-i] [--target nodes|relati
 
 Global flag: `--quiet` suppresses non-essential stderr output.
 
-### Web App
+## Testing
 
-TypeScript + Vite + WebGL2, consuming `biofabric-wasm` for all computation.
+The project has a comprehensive test suite (~395 test functions) organized into four suites:
+
+| Suite | File | Tests | Purpose |
+|-------|------|-------|---------|
+| Parity | `crates/core/tests/parity_tests.rs` | 267 | Byte-level parity with Java BioFabric |
+| Analysis | `crates/core/tests/analysis_tests.rs` | 65 | Graph analysis operations |
+| Image | `crates/core/tests/image_export_tests.rs` | 9 | Image export dimensions |
+| CLI | `crates/cli/tests/cli_tests.rs` | 54 | End-to-end CLI integration |
+
+Parity tests compare Rust output against golden files generated by the original Java BioFabric tool. Golden files must be generated before running:
+
+```bash
+# Generate goldens (Docker-based, first run takes a few minutes)
+./tests/parity/generate_goldens.sh
+
+# Or generate using the Rust implementation (faster)
+cargo test --test parity_tests generate_goldens -- --ignored --nocapture
+```
+
+Running tests:
+
+```bash
+# All tests (requires goldens)
+cargo test
+
+# Parity tests only
+cargo test --test parity_tests
+
+# Analysis tests only
+cargo test --test analysis_tests
+
+# CLI integration tests
+cargo test --test cli_tests
+
+# Image export tests (requires feature flag)
+cargo test --test image_export_tests --features png_export
+```
+
+See `tests/parity/README.md` for detailed test documentation.
 
 ## Building
 
@@ -104,20 +137,12 @@ cargo build
 
 # Run tests
 cargo test
-
-# Build WASM (requires wasm-pack)
-cd web && npm run wasm:build
-
-# Run web dev server
-cd web && npm install && npm run dev
 ```
 
 ## References
 
-- Original Java BioFabric: https://github.com/wjrl/BioFabric
-- Original Alignment plugin: https://github.com/wjrl/AlignmentPlugin
-- BioFabric paper: Longabaugh WJR. Combing the hairball with BioFabric: a new approach for visualization of large networks. BMC Bioinformatics. 2012.
-- VISNAB paper: Desai, R.M., Longabaugh, W.J.R., Hayes, W.B. (2021). BioFabric Visualization of Network Alignments. Springer, Cham. https://doi.org/10.1007/978-3-030-57173-3_4
+- **BioFabric**: Longabaugh, W. J. R. (2012). [Combing the hairball with BioFabric: a new approach for visualization of large networks](https://doi.org/10.1186/1471-2105-13-275). *BMC Bioinformatics*, 13(1), 275.
+- **VISNAB**: Desai, R. M., Longabaugh, W. J. R., & Hayes, W. B. (2021). [BioFabric Visualization of Network Alignments](https://doi.org/10.1007/978-3-030-57173-3_4). In *Biological Networks and Pathway Analysis* (pp. 53-73). Springer, Cham.
 
 ## License
 
