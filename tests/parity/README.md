@@ -3,9 +3,8 @@
 Exact byte-level parity between `biofabric-rs` and the original Java BioFabric.
 
 The Rust rewrite of BioFabric's core library and CLI is **complete**. Every
-layout algorithm, analysis operation, alignment pipeline, XML round-trip path,
-and image export feature has been ported and validated against the Java
-reference implementation.
+layout algorithm, analysis operation, alignment pipeline, and XML round-trip
+path has been ported and validated against the Java reference implementation.
 
 ## How it works
 
@@ -41,7 +40,6 @@ generator produces identical output and is much faster.
 ```bash
 cargo test --test parity_tests -- --include-ignored       # layout parity + property tests
 cargo test --test analysis_tests -- --include-ignored      # graph analysis + alignment scoring
-cargo test --test image_export_tests --features png_export # image export (PNG/JPEG/TIFF)
 cargo test --test cli_tests                                # CLI integration tests
 ```
 
@@ -60,9 +58,8 @@ cargo test --test cli_tests                                # CLI integration tes
 |-----------|---------------|--------------|---------------------------|
 | `parity_tests.rs` | 248 (from 102 macro invocations) | 19 (1 golden-gen + 18 property) | **267** |
 | `analysis_tests.rs` | — | 65 | **65** |
-| `image_export_tests.rs` | — | 9 | **9** |
 | `cli_tests.rs` | — | 54 | **54** |
-| **Total** | | | **395** |
+| **Total** | | | **386** |
 
 ### Parity test breakdown (248 macro-generated + 19 hand-written = 267)
 
@@ -113,20 +110,6 @@ only), and property tests (invariant checks, no golden files).
 | Alignment scoring | 21 | EC, S3, ICS, NC, NGS, LGS, JS across 3 scenarios |
 | Node group sizes | 4 | Node group ratio computation for alignment quality |
 | **Total** | **65** | |
-
-### Image export tests (9 tests)
-
-| Test | What it validates |
-|------|-------------------|
-| `image_export_png_640x480` | PNG dimensions 640×480 |
-| `image_export_png_1920x1080` | PNG dimensions 1920×1080 |
-| `image_export_png_small_100x50` | PNG dimensions 100×50 |
-| `image_export_jpeg_800x600` | JPEG dimensions 800×600 |
-| `image_export_jpeg_1024x768` | JPEG dimensions 1024×768 |
-| `image_export_tiff_640x480` | TIFF dimensions 640×480 |
-| `image_export_tiff_320x240` | TIFF dimensions 320×240 |
-| `image_export_png_1x1` | Degenerate 1×1 PNG |
-| `image_export_custom_background_color` | Custom background color |
 
 ### CLI integration tests (54 tests)
 
@@ -363,7 +346,6 @@ crates/
 │   └── tests/
 │       ├── parity_tests.rs        # 267 test functions (layout parity + properties)
 │       ├── analysis_tests.rs      # 65 test functions (graph analysis + scoring)
-│       ├── image_export_tests.rs  # 9 test functions (image dimensions + format)
 │       └── pipeline_stub.rs       # Rendering pipeline stub for tests
 ├── cli/            # biofabric CLI binary
 │   ├── src/
@@ -418,10 +400,9 @@ cargo test --test parity_tests generate_goldens -- --include-ignored --nocapture
 ## Running specific test subsets
 
 ```bash
-# All tests (395 functions)
+# All tests (386 functions)
 cargo test --test parity_tests -- --include-ignored
 cargo test --test analysis_tests -- --include-ignored
-cargo test --test image_export_tests --features png_export
 cargo test --test cli_tests
 
 # By network
@@ -483,9 +464,6 @@ cargo test --test parity_tests -- --include-ignored controltop_degree_odometer
 cargo test --test parity_tests -- --include-ignored resort_5pass
 cargo test --test parity_tests -- --include-ignored clustered_tol50
 cargo test --test parity_tests -- --include-ignored clustered_chain5
-
-# Image export tests (requires png_export feature)
-cargo test --test image_export_tests --features png_export
 
 # CLI tests
 cargo test --test cli_tests

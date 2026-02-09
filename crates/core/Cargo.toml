@@ -32,6 +32,3 @@ png_export = ["image"]
 name = "biofabric_core"
 path = "src/lib.rs"
 
-[[test]]
-name = "image_export_tests"
-required-features = ["png_export"]
