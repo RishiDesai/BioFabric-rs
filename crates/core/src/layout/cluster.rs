@@ -307,6 +307,7 @@ impl NodeClusterEdgeLayout {
     /// Rearrange links so inter-cluster edges appear between cluster regions.
     ///
     /// Matches Java `NodeClusterLayout.doNodeLayout()` between-mode logic.
+    #[allow(dead_code)]
     fn rearrange_between(&self, layout: &mut NetworkLayout, _build_data: &LayoutBuildData) {
         use super::link_group::ColumnAssigner;
 

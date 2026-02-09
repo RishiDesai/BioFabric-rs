@@ -577,6 +577,7 @@ mod tests {
     use super::*;
     use crate::model::Link;
 
+    #[allow(dead_code)]
     fn create_test_network() -> Network {
         let mut network = Network::new();
         // Simple linear network: A -> B -> C
