@@ -56,12 +56,12 @@ cargo test --test cli_tests                                # CLI integration tes
 
 | Test file | Macro-expanded | Hand-written | Total `#[test]` functions |
 |-----------|---------------|--------------|---------------------------|
-| `parity_tests.rs` | 248 (from 102 macro invocations) | 19 (1 golden-gen + 18 property) | **267** |
+| `parity_tests.rs` | 248 (from 102 macro invocations) | 18 (1 golden-gen + 17 property) | **266** |
 | `analysis_tests.rs` | — | 65 | **65** |
 | `cli_tests.rs` | — | 54 | **54** |
-| **Total** | | | **386** |
+| **Total** | | | **385** |
 
-### Parity test breakdown (248 macro-generated + 19 hand-written = 267)
+### Parity test breakdown (248 macro-generated + 18 hand-written = 266)
 
 | Phase | What | Invocations | Fns/each | Functions |
 |-------|------|-------------|----------|-----------|
@@ -86,9 +86,9 @@ cargo test --test cli_tests                                # CLI integration tes
 | P16 | Alignment — realistic PPI (GROUP view) | 3 | 3 | 9 |
 | P16b | BIF round-trip: DesaiEtAl pub files (annotations) | 5 | 1 | 5 |
 | P17 | Alignment view variants (ORPHAN, CYCLE, NG modes) | 7 | 3 | 21 |
-| — | Property-based cycle layout invariants | — | — | 18 |
+| — | Property-based cycle layout invariants | — | — | 17 |
 | — | Golden file generator (ignored) | — | — | 1 |
-| **Total** | | **102 invocations** | | **267** |
+| **Total** | | **102 invocations** | | **266** |
 
 Each parity test macro generates **three** independent test functions (NOA, EDA,
 BIF) so progress can be tracked incrementally — parsing (NOA passes), then
@@ -117,7 +117,7 @@ The `cli_tests.rs` file validates end-to-end CLI behavior for all subcommands:
 `layout`, `convert`, `export-order`, `info`, `extract`, `align`, `render`,
 `search`, and `compare`.
 
-## Test input files (43 files)
+## Test input files (36 files)
 
 ### SIF networks (17 files)
 
@@ -161,12 +161,14 @@ The `cli_tests.rs` file validates end-to-end CLI behavior for all subcommands:
 | `yeast_sc_perfect.align` | 2379 | Known ground-truth alignment |
 | `yeast_sc_s3_pure.align` | 2379 | Pure structural objective (S3=1.0) |
 
-### BIF files for round-trip testing (3 files)
+### BIF files for round-trip testing (5 files)
 
 | File | Source | Annotation types |
 |------|--------|------------------|
 | `CaseStudy-III-Perfect.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
 | `CaseStudy-III-All-S3.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-All-Importance.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
+| `CaseStudy-III-P05S3.bif` | DesaiEtAl-2019 | Node groups, link groups, shadow link groups |
 | `CaseStudy-IV.bif` | DesaiEtAl-2019 | Cycle boundary annotations |
 
 ### Other input files (4 files)
@@ -201,10 +203,10 @@ both PerfectNG modes, and the cycle view shadow toggle:
 | `NODE_CORRECTNESS` | 76 groups (split by correctness) | 4 tests |
 | `JACCARD_SIMILARITY` | 76 groups (split by JS threshold) | 1 test (threshold=0.75) |
 
-### Property-based cycle layout tests (18 tests)
+### Property-based cycle layout tests (17 tests)
 
 Because Java's `HashSet` iteration order is nondeterministic, byte-level
-parity is not achievable for cycle layout node ordering. Instead, 18
+parity is not achievable for cycle layout node ordering. Instead, 17
 property-based tests verify structural invariants of the cycle layout
 algorithm on two real alignment scenarios (CaseStudy-IV and Yeast↔SC):
 
@@ -218,7 +220,7 @@ algorithm on two real alignment scenarios (CaseStudy-IV and Yeast↔SC):
 | Correct entries come before incorrect entries | 2 |
 | Link source/target rows match node rows | 2 |
 | Cycle detection finds entries for imperfect alignments | 2 |
-| Node column spans are consistent with incident links | 2 |
+| Node column spans are consistent with incident links | 1 |
 
 ### Scoring metrics (21 tests in analysis_tests.rs)
 
