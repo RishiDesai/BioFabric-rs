@@ -1,5 +1,5 @@
 [package]
-name = "biofabric-cli"
+name = "biofabric"
 description = "Command-line tool for BioFabric network visualization"
 version.workspace = true
 edition.workspace = true
