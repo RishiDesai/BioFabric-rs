@@ -7,6 +7,8 @@
 # Docker build or CI environment where the Java classes have already
 # been compiled.
 #
+# Phases mirror generate_goldens.sh:
+#
 # Prerequisites:
 #   - Java classes at $JAVA_CP (default: /build/classes)
 #   - Network files at $NETWORKS_DIR (default: tests/parity/networks)
