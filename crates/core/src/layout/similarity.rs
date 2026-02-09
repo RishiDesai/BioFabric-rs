@@ -37,13 +37,6 @@ pub enum SimilarityMode {
 /// Node similarity layout algorithm.
 ///
 /// Orders nodes by structural similarity using either resort or clustered mode.
-///
-/// ## Example
-///
-/// ```rust,ignore
-/// let layout = NodeSimilarityLayout::new(SimilarityMode::Clustered);
-/// let order = layout.layout_nodes(&network, &Default::default(), &NoopMonitor)?;
-/// ```
 #[derive(Debug, Clone)]
 pub struct NodeSimilarityLayout {
     mode: SimilarityMode,

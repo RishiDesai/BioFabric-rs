@@ -11,16 +11,6 @@
 //! - **Screen coordinates**: pixel space of the output canvas. Origin (0, 0)
 //!   is top-left.
 //!
-//! ## Usage (CLI image export)
-//!
-//! ```rust,ignore
-//! let layout = /* computed NetworkLayout */;
-//! let mut camera = Camera::for_canvas(1920, 1080);
-//! camera.zoom_to_fit(&layout, true);  // fit entire network
-//! let params = camera.render_params(true);
-//! let output = RenderOutput::extract(&layout, &params, &palette);
-//! ```
-//!
 //! ## References
 //!
 //! - Java: `org.systemsbiology.biofabric.ui.display.BasicZoomTargetSupport`

@@ -121,17 +121,9 @@ impl ProgressMonitor for NoopMonitor {
 ///
 /// ## Usage
 ///
-/// ```rust,ignore
-/// use biofabric_core::worker::{LoopReporter, NoopMonitor};
-///
-/// let monitor = &NoopMonitor;
-/// let mut lr = LoopReporter::new(items.len() as u64, 20, monitor, 0.0, 1.0, "Processing");
-/// for item in &items {
-///     // ... do work ...
-///     lr.tick()?; // returns Err(CancelledError) if cancelled
-/// }
-/// lr.finish();
-/// ```
+/// Call `LoopReporter::new(total, bins, monitor, lo, hi, phase)` before a
+/// tight loop, then `lr.tick()?` each iteration (returns
+/// `Err(CancelledError)` if cancelled) and `lr.finish()` when done.
 ///
 /// The `start_frac` / `end_frac` parameters let you divide a larger
 /// operation into phases that each report a sub-range of the overall

@@ -4,14 +4,6 @@
 //! It is consumed by render extraction, image export, and (eventually)
 //! the interactive UI.
 //!
-//! ## CLI usage
-//!
-//! ```rust,ignore
-//! let opts = DisplayOptions::default();  // sensible defaults
-//! let params = camera.render_params_with_options(&opts);
-//! let output = RenderOutput::extract(&layout, &params, &palette);
-//! ```
-//!
 //! ## References
 //!
 //! - Java: `org.systemsbiology.biofabric.ui.FabricDisplayOptions`
