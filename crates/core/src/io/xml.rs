@@ -121,26 +121,13 @@ pub fn write_session_writer<W: Write>(
     // -- Build helper maps --
 
     // NID map: NodeId → sequential integer
-    // Alignment sessions (merged IDs with "::") are ordered by G1/G2 parts
-    // to match Java's alignment node ID assignment.
-    let mut nid_ids: Vec<NodeId> = network.node_ids().cloned().collect();
-    let has_alignment_ids = nid_ids.iter().any(|id| id.as_str().contains("::"));
-    if has_alignment_ids {
-        nid_ids.sort_by(|a, b| {
-            let (a_g1, a_g2) = split_alignment_id(a.as_str());
-            let (b_g1, b_g2) = split_alignment_id(b.as_str());
-            let a_group = alignment_nid_group(a_g1, a_g2);
-            let b_group = alignment_nid_group(b_g1, b_g2);
-            a_group
-                .cmp(&b_group)
-                .then_with(|| a_g1.cmp(b_g1))
-                .then_with(|| a_g2.cmp(b_g2))
-        });
-    } else {
-        nid_ids.sort();
-    }
-    let nid_map: IndexMap<NodeId, usize> = nid_ids
-        .into_iter()
+    // Java's UniqueLabeller assigns nids in insertion order (the order nodes
+    // are first encountered during network building). Since Network uses an
+    // IndexMap that preserves insertion order, node_ids() already yields
+    // nodes in the correct order — no sorting needed.
+    let nid_map: IndexMap<NodeId, usize> = network
+        .node_ids()
+        .cloned()
         .enumerate()
         .map(|(i, id)| (id, i))
         .collect();
@@ -265,32 +252,23 @@ fn format_java_double(v: f64) -> String {
     }
 }
 
-fn split_alignment_id(id: &str) -> (&str, &str) {
-    let mut parts = id.splitn(2, "::");
-    let g1 = parts.next().unwrap_or("");
-    let g2 = parts.next().unwrap_or("");
-    (g1, g2)
-}
-
-fn alignment_nid_group(g1: &str, g2: &str) -> u8 {
-    if !g1.is_empty() && !g2.is_empty() {
-        0 // aligned (purple)
-    } else if !g1.is_empty() {
-        1 // g1-only (blue)
-    } else {
-        2 // g2-only (red)
-    }
-}
-
 /// Build the brighter (node) and darker (link) color maps.
 ///
 /// Returns (brighter, darker) as vectors of (key, FabricColor) in gene color order.
+///
+/// **Important:** The color maps are always computed using the default lighter/darker
+/// levels (0.43/0.43), regardless of the current display options. This matches Java's
+/// behavior where `FabricColorGenerator.newColorModel()` is called once at startup
+/// with the default `FabricDisplayOptions`, and subsequent changes to
+/// `nodeLighterLevel_` / `linkDarkerLevel_` do not trigger a recomputation of the
+/// brighter/darker color maps. The display options values are written to the
+/// `<displayOptions>` XML element but do NOT affect the `<colors>` section.
 fn build_color_maps(
     gene_colors: &[FabricColor; 32],
-    display: &DisplayOptions,
+    _display: &DisplayOptions,
 ) -> (Vec<(&'static str, FabricColor)>, Vec<(&'static str, FabricColor)>) {
-    let light = display.node_lighter_level + 1.0;
-    let dark = 1.0 / (display.link_darker_level + 1.0);
+    let light = JAVA_DEFAULT_NODE_LIGHTER + 1.0;
+    let dark = 1.0 / (JAVA_DEFAULT_LINK_DARKER + 1.0);
 
     let mut brighter = Vec::with_capacity(32);
     let mut darker = Vec::with_capacity(32);
@@ -434,9 +412,16 @@ fn write_nodes<W: Write>(
             (nl.min_col.to_string(), nl.max_col.to_string())
         };
 
+        // Include cluster attribute if the node has a cluster assignment
+        let cluster_attr = layout
+            .cluster_assignments
+            .get(*id)
+            .map(|c| format!(" cluster=\"{}\"", xml_escape(c)))
+            .unwrap_or_default();
+
         write!(
             w,
-            "    <node name=\"{}\" nid=\"{}\" row=\"{}\" minCol=\"{}\" maxCol=\"{}\" minColSha=\"{}\" maxColSha=\"{}\" color=\"{}\">\n",
+            "    <node name=\"{}\" nid=\"{}\" row=\"{}\" minCol=\"{}\" maxCol=\"{}\" minColSha=\"{}\" maxColSha=\"{}\" color=\"{}\"{}>\n",
             xml_escape(&nl.name),
             nid,
             nl.row,
@@ -445,6 +430,7 @@ fn write_nodes<W: Write>(
             min_col_sha,
             max_col_sha,
             color_key,
+            cluster_attr,
         )?;
 
         // Plain drain zones — use pre-computed if available (e.g., from submodel extraction)
@@ -572,9 +558,10 @@ fn write_links<W: Write>(
             .and_then(|nl| nl.nid)
             .unwrap_or_else(|| nid_map.get(trg_id).copied().unwrap_or(0));
 
-        // Java's BioFabric always writes directed="false" in BIF files.
-        // The standard BioFabric layout treats all links as undirected.
-        let directed = false;
+        // Use directed from LinkLayout if explicitly set, otherwise default to false
+        // (matching Java's standard BioFabric behavior which writes directed="false").
+        // SetLayout overrides this to true for its links.
+        let directed = ll.directed.unwrap_or(false);
 
         // Java assigns link color based on the shadow column index.
         // For extracted submodels, color_index stores the ORIGINAL shadow column
@@ -1230,6 +1217,7 @@ fn parse_bif_xml(xml: &str) -> Result<Session, ParseError> {
         );
         ll.column_no_shadows = pl.column_no_shadows;
         ll.color_index = pl.color_index;
+        ll.directed = if pl.directed { Some(true) } else { None };
 
         if pl.shadow_col > max_shadow_col {
             max_shadow_col = pl.shadow_col;

@@ -284,16 +284,18 @@ impl EdgeLayout for NodeClusterEdgeLayout {
         params: &LayoutParams,
         monitor: &dyn ProgressMonitor,
     ) -> LayoutResult<NetworkLayout> {
-        // Use the default edge layout first
+        // Use the default edge layout. For both Inline and Between modes,
+        // the DefaultEdgeLayout already produces the correct ordering because
+        // the node ordering groups cluster members contiguously, and the
+        // default comparator (anchor_row → shadow → far_row → ...) naturally
+        // places inter-cluster edges between cluster zones.
+        //
+        // The previous `rearrange_between` post-processing was incorrect:
+        // it moved intra-cluster shadow links before inter-cluster links,
+        // breaking the column ordering that Java's DefaultFabricLinkLocater
+        // would produce.
         let edge_layout = DefaultEdgeLayout::new();
-        let mut layout = edge_layout.layout_edges(build_data, params, monitor)?;
-
-        // If Between mode, rearrange inter-cluster edges
-        if self.params.inter_cluster == InterClusterPlacement::Between {
-            self.rearrange_between(&mut layout, build_data);
-        }
-
-        Ok(layout)
+        edge_layout.layout_edges(build_data, params, monitor)
     }
 
     fn name(&self) -> &'static str {

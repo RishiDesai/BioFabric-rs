@@ -123,6 +123,20 @@ impl ControlTopLayout {
         ctrl
     }
 
+    /// Find control nodes including shadow link sources.
+    ///
+    /// Java `controlNodes()` operates on `rbd.getLinks()` which includes
+    /// shadow links. This means shadow sources (the original link targets)
+    /// also become control nodes. Some control ordering modes (IntraDegree)
+    /// need this broader set to match Java behavior.
+    fn find_control_nodes_with_shadows(network: &Network) -> HashSet<NodeId> {
+        let mut ctrl = HashSet::new();
+        for link in network.links() {
+            ctrl.insert(link.source.clone());
+        }
+        ctrl
+    }
+
     /// Compute degree for each node from non-shadow links.
     ///
     /// Java `GraphSearcher.nodeDegree(false, edges)` counts both source
@@ -194,6 +208,79 @@ impl ControlTopLayout {
             db.cmp(&da).then_with(|| b.cmp(a))
         });
         nodes
+    }
+
+    /// Order control nodes by intra-control-set link degree.
+    ///
+    /// Matches Java `controlSortIntraDegreeOnly()`:
+    /// 1. Collect ctrlLinks = all links (including shadows) where target is in ctrlNodes
+    /// 2. Compute degree of each ctrl node from ctrlLinks (both src and tgt endpoints)
+    /// 3. Sort by degree ASC, name ASC (matching Java NodeDegree.compareTo)
+    /// 4. Append any ctrl nodes with zero intra-degree (not returned by degree computation)
+    /// 5. Reverse the entire list → degree DESC, name DESC within ties
+    fn control_sort_intra_degree_only(
+        network: &Network,
+        ctrl_set: &HashSet<NodeId>,
+    ) -> Vec<NodeId> {
+        // Step 1: Collect ctrlLinks — links (including shadows) where target is in ctrlNodes.
+        // This matches Java: for (NetLink nextLink : links) { if (ctrlNodes.contains(nextLink.getTrgNode())) ctrlLinks.add(nextLink); }
+        let ctrl_links: Vec<_> = network
+            .links()
+            .filter(|link| ctrl_set.contains(&link.target))
+            .collect();
+
+        // Step 2: Compute degree per (node, relation) pair from ctrlLinks,
+        // counting both source and target (inOnly=false).
+        // Then sum across relations per node.
+        // This matches Java GraphSearcher.nodeDegree(false, ctrlLinks).
+        let mut node_rel_count: HashMap<(&NodeId, &str), usize> = HashMap::new();
+        for link in &ctrl_links {
+            // Source side
+            *node_rel_count
+                .entry((&link.source, &link.relation))
+                .or_insert(0) += 1;
+            // Target side
+            *node_rel_count
+                .entry((&link.target, &link.relation))
+                .or_insert(0) += 1;
+        }
+
+        // Sum across relations per node
+        let mut intra_degree: HashMap<&NodeId, usize> = HashMap::new();
+        for ((node, _rel), &count) in &node_rel_count {
+            *intra_degree.entry(node).or_insert(0) += count;
+        }
+
+        // Step 3: Sort by degree ASC, then name ASC (matching Java NodeDegree.compareTo
+        // which is used in TreeSet<NodeDegree>). Only nodes that appear in intra_degree
+        // (i.e., have at least one ctrlLink endpoint) are included.
+        let mut degree_ordered: Vec<NodeId> = intra_degree
+            .keys()
+            .map(|&n| n.clone())
+            .collect();
+        degree_ordered.sort_by(|a, b| {
+            let da = intra_degree.get(a).copied().unwrap_or(0);
+            let db = intra_degree.get(b).copied().unwrap_or(0);
+            da.cmp(&db).then_with(|| a.cmp(b))
+        });
+
+        // Step 4: Add remaining ctrl nodes not in the degree list (zero intra-degree).
+        // Java: ctrlNodes.removeAll(retval); retval.addAll(ctrlNodes);
+        // ctrlNodes is a SortedSet (TreeSet), so remaining are added in name-ascending order.
+        let in_result: HashSet<NodeId> = degree_ordered.iter().cloned().collect();
+        let mut remaining: Vec<NodeId> = ctrl_set
+            .iter()
+            .filter(|n| !in_result.contains(n))
+            .cloned()
+            .collect();
+        remaining.sort(); // TreeSet natural order = name ascending
+        degree_ordered.extend(remaining);
+
+        // Step 5: Reverse the entire list.
+        // Java: Collections.reverse(retval);
+        degree_ordered.reverse();
+
+        degree_ordered
     }
 
     /// Extract a sublist from `dfo` containing only nodes in `node_set`,
@@ -582,12 +669,19 @@ impl NodeLayout for ControlTopLayout {
         // not just the user-specified subset. The fixed list specifies the ORDER of some
         // control nodes; remaining control nodes are appended in natural (sorted) order.
         // For other modes with explicit control_nodes: use only the specified set.
+        //
+        // For IntraDegree mode: Java's controlNodes() operates on rbd.getLinks() which
+        // includes shadow links, so shadow sources (original targets) also become control
+        // nodes. We use find_control_nodes_with_shadows() for this case.
         let ctrl_set: HashSet<NodeId> = if self.config.control_order == ControlOrder::FixedList {
             // Java: controlNodes() collects getSrcNode() from all links
             Self::find_control_nodes(network)
         } else if !self.config.control_nodes.is_empty() {
             // If control_nodes provided but not FixedList mode, use them as the set
             self.config.control_nodes.iter().cloned().collect()
+        } else if self.config.control_order == ControlOrder::IntraDegree {
+            // IntraDegree: include shadow sources to match Java behavior
+            Self::find_control_nodes_with_shadows(network)
         } else {
             // Auto-detect: all source nodes of non-shadow links
             Self::find_control_nodes(network)
@@ -626,9 +720,7 @@ impl NodeLayout for ControlTopLayout {
                 list
             }
             ControlOrder::IntraDegree => {
-                // Order by intra-control-set link degree
-                // For now, use degree-only as fallback
-                Self::list_to_sublist(&ctrl_set, &dfo)
+                Self::control_sort_intra_degree_only(network, &ctrl_set)
             }
             ControlOrder::MedianTargetDegree => {
                 // Order by median degree of targets

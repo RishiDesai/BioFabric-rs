@@ -17,11 +17,16 @@ FROM eclipse-temurin:11-jdk
 
 WORKDIR /build
 
-# Copy BioFabric source (with headless fixes applied directly)
-COPY BioFabric/src /build/biofabric-src
+# Clone BioFabric source from the fork (contains headless fixes + bug fixes)
+RUN apt-get update -qq && apt-get install -y -qq git > /dev/null && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/abundant-ai/BioFabric.git /tmp/BioFabric && \
+    mv /tmp/BioFabric/src /build/biofabric-src && \
+    rm -rf /tmp/BioFabric
 
-# Copy AlignmentPlugin source
-COPY AlignmentPlugin/src /build/alignment-src
+# Clone AlignmentPlugin source from the fork
+RUN git clone --depth 1 https://github.com/abundant-ai/AlignmentPlugin.git /tmp/AlignmentPlugin && \
+    mv /tmp/AlignmentPlugin/src /build/alignment-src && \
+    rm -rf /tmp/AlignmentPlugin
 
 # Copy golden generator source
 COPY tests/parity/java-harness/src/GoldenGenerator.java /build/harness/GoldenGenerator.java

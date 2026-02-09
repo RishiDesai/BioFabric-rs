@@ -92,6 +92,17 @@ pub struct NetworkLayout {
     ///
     /// Typically `"true"` or `"false"`. Empty means default (`"true"`).
     pub link_group_annots: String,
+
+    /// Per-node cluster assignments (node ID → cluster name).
+    ///
+    /// Populated by `NodeClusterLayout`. Written as `cluster="..."` attribute
+    /// on `<node>` elements in BIF XML.
+    ///
+    /// ## References
+    ///
+    /// - Java: `BioFabricNetwork.NodeInfo.getCluster()`
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub cluster_assignments: std::collections::HashMap<NodeId, String>,
 }
 
 impl NetworkLayout {
@@ -109,6 +120,7 @@ impl NetworkLayout {
             link_group_order: Vec::new(),
             layout_mode_text: String::new(),
             link_group_annots: String::new(),
+            cluster_assignments: std::collections::HashMap::new(),
         }
     }
 
@@ -126,6 +138,7 @@ impl NetworkLayout {
             link_group_order: Vec::new(),
             layout_mode_text: String::new(),
             link_group_annots: String::new(),
+            cluster_assignments: std::collections::HashMap::new(),
         }
     }
 
@@ -142,6 +155,11 @@ impl NetworkLayout {
     /// Iterate over link layouts.
     pub fn iter_links(&self) -> impl Iterator<Item = &LinkLayout> {
         self.links.iter()
+    }
+
+    /// Iterate mutably over all link layouts.
+    pub fn iter_links_mut(&mut self) -> impl Iterator<Item = &mut LinkLayout> {
+        self.links.iter_mut()
     }
 }
 
@@ -320,6 +338,11 @@ pub struct LinkLayout {
 
     /// Color index for this link (for rendering).
     pub color_index: usize,
+
+    /// Whether this link is directed.
+    /// `None` means use the default (false for standard BioFabric).
+    /// Set to `Some(true)` by SetLayout.
+    pub directed: Option<bool>,
 }
 
 impl LinkLayout {
@@ -343,6 +366,7 @@ impl LinkLayout {
             relation: relation.into(),
             is_shadow,
             color_index: 0,
+            directed: None,
         }
     }
 
