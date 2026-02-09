@@ -89,7 +89,7 @@ if ! $CONTAINER_MODE; then
     RUST_BINARY="${RUST_BINARY:-$REPO_ROOT/target/release/biofabric}"
     if [ ! -f "$RUST_BINARY" ] || [ "$REPO_ROOT/crates/cli/src/main.rs" -nt "$RUST_BINARY" ]; then
         echo "--- Compiling Rust biofabric (release mode) ---"
-        cargo build --release -p biofabric-cli --manifest-path "$REPO_ROOT/Cargo.toml"
+        cargo build --release -p biofabric --manifest-path "$REPO_ROOT/Cargo.toml"
         echo "--- Rust binary ready ---"
         echo
     else

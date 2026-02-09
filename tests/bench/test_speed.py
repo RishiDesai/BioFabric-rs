@@ -270,7 +270,7 @@ def test_rust_binary_available():
     """Rust biofabric binary must be compiled."""
     assert os.path.isfile(RUST_BINARY) or shutil.which(RUST_BINARY), (
         f"Rust biofabric binary not found at {RUST_BINARY}.  "
-        f"Compile with: cargo build --release -p biofabric-cli"
+        f"Compile with: cargo build --release -p biofabric"
     )
 
 

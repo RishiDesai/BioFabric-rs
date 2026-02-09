@@ -28,7 +28,7 @@ biofabric-rs/
 │   │       ├── analysis/  # BFS, DFS, components, cycles
 │   │       ├── render/    # Colors, bucket renderer, tiles
 │   │       └── util/      # Quadtree, data helpers
-│   ├── cli/               # biofabric-cli   — command-line tool
+│   ├── cli/               # biofabric       — command-line tool
 │   └── wasm/              # biofabric-wasm  — WebAssembly bindings (In Progress)
 ├── web/                   # Web frontend (Planned)
 ```
@@ -71,7 +71,7 @@ The current implementation focuses on the `core` library and `cli` tool.
 
 ### CLI
 
-The `biofabric-cli` provides a comprehensive suite of tools for working with BioFabric networks.
+The `biofabric` CLI provides a comprehensive suite of tools for working with BioFabric networks.
 
 ```
 biofabric layout        <input>  [--algorithm default|similarity|...] [-o layout.json]
