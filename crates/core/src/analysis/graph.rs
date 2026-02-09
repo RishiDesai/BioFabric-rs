@@ -19,14 +19,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 ///
 /// # Returns
 /// Vector of node IDs in BFS visit order, or empty if start node doesn't exist.
-///
-/// # Example
-/// ```rust,ignore
-/// let order = bfs(&network, &NodeId::new("A"));
-/// for node in order {
-///     println!("Visited: {}", node);
-/// }
-/// ```
 pub fn bfs(network: &Network, start: &NodeId) -> Vec<NodeId> {
     if !network.contains_node(start) {
         return Vec::new();
@@ -110,13 +102,6 @@ pub fn dfs(network: &Network, start: &NodeId) -> Vec<NodeId> {
 /// Returns a vector of components, where each component is a vector of node IDs.
 /// Components are sorted by size (largest first), and nodes within each
 /// component are in BFS order from the highest-degree node.
-///
-/// # Example
-/// ```rust,ignore
-/// let components = connected_components(&network);
-/// println!("Found {} components", components.len());
-/// println!("Largest component has {} nodes", components[0].len());
-/// ```
 pub fn connected_components(network: &Network) -> Vec<Vec<NodeId>> {
     let mut unvisited: HashSet<NodeId> = network.node_ids().cloned().collect();
     let mut components = Vec::new();

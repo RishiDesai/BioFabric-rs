@@ -20,16 +20,6 @@
 //!
 //! - Java implementation: `org.systemsbiology.biofabric.io.SIFImportLoader`
 //! - Cytoscape SIF format: <https://cytoscape.org/manual/Cytoscape3_10_0Manual.pdf>
-//!
-//! ## Example
-//!
-//! ```rust,ignore
-//! use biofabric::io::sif;
-//! use std::path::Path;
-//!
-//! let network = sif::parse_file(Path::new("network.sif"))?;
-//! println!("Loaded {} nodes, {} links", network.node_count(), network.link_count());
-//! ```
 
 use super::{ImportStats, ParseError};
 use crate::model::{Link, Network};
@@ -44,11 +34,6 @@ use std::path::Path;
 /// # Returns
 /// * `Ok(Network)` - The parsed network
 /// * `Err(ParseError)` - If the file could not be parsed
-///
-/// # Example
-/// ```rust,ignore
-/// let network = sif::parse_file(Path::new("network.sif"))?;
-/// ```
 pub fn parse_file(path: &Path) -> Result<Network, ParseError> {
     let file = std::fs::File::open(path)?;
     parse_reader(BufReader::new(file))

@@ -287,21 +287,6 @@ impl PartialOrd for LinkSortKey {
 /// Maintains two column counters — one for "shadow-on" mode and one for
 /// "shadow-off" mode — so the renderer can toggle shadow display in O(1).
 ///
-/// ## Usage
-///
-/// ```rust,ignore
-/// let mut ca = ColumnAssigner::new();
-///
-/// // For a regular (non-shadow) link:
-/// let (col, col_no_shadow) = ca.assign_regular();
-///
-/// // For a shadow link:
-/// let col = ca.assign_shadow();
-///
-/// println!("Total columns (shadows on):  {}", ca.column_count());
-/// println!("Total columns (shadows off): {}", ca.column_count_no_shadows());
-/// ```
-///
 /// ## References
 ///
 /// - Java: `BioFabricNetwork.ColumnAssign`

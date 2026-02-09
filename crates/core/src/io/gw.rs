@@ -34,15 +34,6 @@
 //!
 //! - LEDA GW format: <http://www.algorithmic-solutions.info/leda_manual/GW.html>
 //! - Java implementation: `org.systemsbiology.biofabric.io.GWImportLoader`
-//!
-//! ## Example
-//!
-//! ```rust,ignore
-//! use biofabric::io::gw;
-//! use std::path::Path;
-//!
-//! let network = gw::parse_file(Path::new("network.gw"))?;
-//! ```
 
 use super::{ImportStats, ParseError};
 use crate::model::Network;

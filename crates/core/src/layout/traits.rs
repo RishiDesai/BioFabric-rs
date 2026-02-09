@@ -130,22 +130,6 @@ pub struct LayoutParams {
 /// - Handle disconnected components
 /// - Periodically check `monitor` for cancellation (via [`LoopReporter`](crate::worker::LoopReporter)
 ///   or direct calls to [`ProgressMonitor::keep_going`])
-///
-/// ## Example Implementation
-///
-/// ```rust,ignore
-/// struct AlphabeticalLayout;
-///
-/// impl NodeLayout for AlphabeticalLayout {
-///     fn layout_nodes(&self, network: &Network, _params: &LayoutParams, _monitor: &dyn ProgressMonitor)
-///         -> LayoutResult<Vec<NodeId>>
-///     {
-///         let mut nodes: Vec<_> = network.node_ids().cloned().collect();
-///         nodes.sort();
-///         Ok(nodes)
-///     }
-/// }
-/// ```
 pub trait NodeLayout {
     /// Compute the node ordering.
     ///

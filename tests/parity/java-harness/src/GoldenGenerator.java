@@ -123,8 +123,15 @@ public class GoldenGenerator {
     private List<String> setNodes = null;
     private String linkMeans = null;
 
+    // ---- NodeSimilarity custom params ----
+    private Integer passCount = null;      // ResortParams: default 10
+    private Double tolerance = null;       // ClusterParams: default 0.80
+    private Integer chainLength = null;    // ClusterParams: default 15
+
     // ---- NodeCluster options ----
     private String attributeFile = null;
+    private String clusterOrder = null;      // name, node_size, link_size
+    private String clusterPlacement = null;  // between, inline
 
     // ---- Fixed-order import options ----
     private String noaFile = null;
@@ -173,7 +180,12 @@ public class GoldenGenerator {
             System.err.println("  --target-mode MODE     ControlTop: target_degree, breadth_order, etc.");
             System.err.println("  --set-nodes A,B        SetLayout: set node names");
             System.err.println("  --link-means MODE      SetLayout: belongs_to or contains");
+            System.err.println("  --pass-count N         Similarity resort: number of passes (default 10)");
+            System.err.println("  --tolerance F          Similarity clustered: tolerance threshold (default 0.80)");
+            System.err.println("  --chain-length N       Similarity clustered: chain length (default 15)");
             System.err.println("  --attribute-file PATH  NodeCluster: .na attribute file");
+            System.err.println("  --cluster-order MODE   NodeCluster: name, node_size, link_size (default name)");
+            System.err.println("  --cluster-placement M  NodeCluster: between (default), inline");
             System.err.println("  --noa-file PATH        Fixed node order from .noa file");
             System.err.println("  --eda-file PATH        Fixed link order from .eda file");
             System.err.println("  --extract-nodes A,B    Subnetwork extraction node list");
@@ -246,9 +258,34 @@ public class GoldenGenerator {
                         gen.linkMeans = argv[++i];
                     }
                     break;
+                case "--pass-count":
+                    if (i + 1 < argv.length) {
+                        gen.passCount = Integer.valueOf(argv[++i]);
+                    }
+                    break;
+                case "--tolerance":
+                    if (i + 1 < argv.length) {
+                        gen.tolerance = Double.valueOf(argv[++i]);
+                    }
+                    break;
+                case "--chain-length":
+                    if (i + 1 < argv.length) {
+                        gen.chainLength = Integer.valueOf(argv[++i]);
+                    }
+                    break;
                 case "--attribute-file":
                     if (i + 1 < argv.length) {
                         gen.attributeFile = argv[++i];
+                    }
+                    break;
+                case "--cluster-order":
+                    if (i + 1 < argv.length) {
+                        gen.clusterOrder = argv[++i];
+                    }
+                    break;
+                case "--cluster-placement":
+                    if (i + 1 < argv.length) {
+                        gen.clusterPlacement = argv[++i];
                     }
                     break;
                 case "--noa-file":
@@ -859,21 +896,35 @@ public class GoldenGenerator {
         BuildDataImpl bd;
 
         switch (layout) {
-            case "similarity_resort":
+            case "similarity_resort": {
                 System.out.println("Applying layout: NodeSimilarity (resort/reorder)...");
                 bmode = BuildDataImpl.BuildMode.REORDER_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
-                // ResortParams(): passCount=10, terminateAtIncrease=false
-                bfn = runLayoutAndBuild(bd, new NodeSimilarityLayout.ResortParams());
+                NodeSimilarityLayout.ResortParams rp = new NodeSimilarityLayout.ResortParams();
+                if (passCount != null) {
+                    rp.passCount = passCount.intValue();
+                    System.out.println("  passCount = " + passCount);
+                }
+                bfn = runLayoutAndBuild(bd, rp);
                 break;
+            }
 
-            case "similarity_clustered":
+            case "similarity_clustered": {
                 System.out.println("Applying layout: NodeSimilarity (clustered)...");
                 bmode = BuildDataImpl.BuildMode.CLUSTERED_LAYOUT;
                 bd = new BuildDataImpl(bfn, bmode, null);
-                // ClusterParams(): tolerance=0.0, chainLength=5, JACCARD
-                bfn = runLayoutAndBuild(bd, new NodeSimilarityLayout.ClusterParams());
+                NodeSimilarityLayout.ClusterParams cp = new NodeSimilarityLayout.ClusterParams();
+                if (tolerance != null) {
+                    cp.tolerance = tolerance.doubleValue();
+                    System.out.println("  tolerance = " + tolerance);
+                }
+                if (chainLength != null) {
+                    cp.chainLength = chainLength.intValue();
+                    System.out.println("  chainLength = " + chainLength);
+                }
+                bfn = runLayoutAndBuild(bd, cp);
                 break;
+            }
 
             case "hierdag":
                 System.out.println("Applying layout: HierDAG (pointUp=" + pointUp + ")...");
@@ -924,11 +975,35 @@ public class GoldenGenerator {
                     }
                 }
                 bd.clustAssign = clustAssign;
+                // Resolve cluster order
+                NodeClusterLayout.ClusterParams.Order clOrd = NodeClusterLayout.ClusterParams.Order.NAME;
+                if (clusterOrder != null) {
+                    switch (clusterOrder) {
+                        case "name":      clOrd = NodeClusterLayout.ClusterParams.Order.NAME; break;
+                        case "node_size": clOrd = NodeClusterLayout.ClusterParams.Order.NODE_SIZE; break;
+                        case "link_size": clOrd = NodeClusterLayout.ClusterParams.Order.LINK_SIZE; break;
+                        case "breadth":   clOrd = NodeClusterLayout.ClusterParams.Order.BREADTH; break;
+                        default: throw new IllegalArgumentException("Unknown --cluster-order: " + clusterOrder);
+                    }
+                    System.out.println("  clusterOrder = " + clusterOrder);
+                }
+
+                // Resolve cluster placement (inter-link mode)
+                NodeClusterLayout.ClusterParams.InterLink clILink = NodeClusterLayout.ClusterParams.InterLink.BETWEEN;
+                if (clusterPlacement != null) {
+                    switch (clusterPlacement) {
+                        case "between": clILink = NodeClusterLayout.ClusterParams.InterLink.BETWEEN; break;
+                        case "inline":  clILink = NodeClusterLayout.ClusterParams.InterLink.INLINE; break;
+                        default: throw new IllegalArgumentException("Unknown --cluster-placement: " + clusterPlacement);
+                    }
+                    System.out.println("  clusterPlacement = " + clusterPlacement);
+                }
+
                 // NodeClusterLayout needs ClusterParams with cluster data
                 NodeClusterLayout.ClusterParams nclParams = new NodeClusterLayout.ClusterParams(
                     NodeClusterLayout.ClusterParams.Source.STORED,
-                    NodeClusterLayout.ClusterParams.Order.NAME,
-                    NodeClusterLayout.ClusterParams.InterLink.BETWEEN,
+                    clOrd,
+                    clILink,
                     NodeClusterLayout.ClusterParams.ClustLayout.BREADTH_CONN_FIRST,
                     null, clusterAttribs, clusterNameToNode, false);
                 bfn = runLayoutAndBuild(bd, nclParams);
