@@ -108,7 +108,9 @@ pub fn run(args: AlignArgs, quiet: bool) -> Result<(), Box<dyn std::error::Error
             }
             "png" | "jpg" | "jpeg" | "tiff" | "tif" => {
                 use biofabric_core::export::{ExportOptions, ImageExporter, ImageFormat};
+                use biofabric_core::render::color::ColorPalette;
                 use biofabric_core::render::gpu_data::RenderOutput;
+                use biofabric_core::render::viewport::{RenderParams, Viewport};
 
                 let height = if args.height == 0 {
                     if layout.column_count == 0 {
@@ -127,9 +129,27 @@ pub fn run(args: AlignArgs, quiet: bool) -> Result<(), Box<dyn std::error::Error
                     _ => ImageFormat::Png,
                 };
 
-                // Full render extraction is not yet implemented in core;
-                // use an empty placeholder for now (background-only image).
-                let render = RenderOutput::empty();
+                let total_cols = if show_shadows {
+                    layout.column_count
+                } else {
+                    layout.column_count_no_shadows
+                };
+                let viewport = Viewport::new(
+                    0.0, 0.0,
+                    total_cols as f64,
+                    layout.row_count as f64,
+                );
+                let ppgu = if layout.row_count > 0 && total_cols > 0 {
+                    (height as f64 / layout.row_count as f64)
+                        .min(args.width as f64 / total_cols as f64)
+                } else {
+                    1.0
+                };
+                let render_params = RenderParams::new(
+                    viewport, ppgu, args.width, height, show_shadows,
+                );
+                let palette = ColorPalette::alignment_palette();
+                let render = RenderOutput::extract(&layout, &render_params, &palette);
 
                 let export_opts = ExportOptions {
                     format,

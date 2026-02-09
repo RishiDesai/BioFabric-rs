@@ -5,7 +5,9 @@ use biofabric_core::export::{ExportOptions, ImageExporter, ImageFormat};
 use biofabric_core::io::factory::FabricFactory;
 use biofabric_core::layout::traits::{LayoutMode, LayoutParams, NetworkLayoutAlgorithm, TwoPhaseLayout};
 use biofabric_core::layout::{DefaultEdgeLayout, DefaultNodeLayout};
+use biofabric_core::render::color::ColorPalette;
 use biofabric_core::render::gpu_data::RenderOutput;
+use biofabric_core::render::viewport::{RenderParams, Viewport};
 use biofabric_core::worker::NoopMonitor;
 
 pub fn run(args: RenderArgs, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -66,10 +68,18 @@ pub fn run(args: RenderArgs, quiet: bool) -> Result<(), Box<dyn std::error::Erro
         }
     };
 
-    // Build a minimal RenderOutput; full render extraction (viewport
-    // culling, LOD, labels) is not yet implemented in the core library.
-    // We can still export a background-only image at the correct dimensions.
-    let render = RenderOutput::empty();
+    // Extract render instances from the layout
+    let total_cols = if show_shadows { layout.column_count } else { layout.column_count_no_shadows };
+    let viewport = Viewport::new(0.0, 0.0, total_cols as f64, layout.row_count as f64);
+    let ppgu = if layout.row_count > 0 && total_cols > 0 {
+        (height as f64 / layout.row_count as f64)
+            .min(args.width as f64 / total_cols as f64)
+    } else {
+        1.0
+    };
+    let render_params = RenderParams::new(viewport, ppgu, args.width, height, show_shadows);
+    let palette = ColorPalette::default_palette();
+    let render = RenderOutput::extract(&layout, &render_params, &palette);
 
     let export_opts = ExportOptions {
         format,
