@@ -12,13 +12,16 @@
 #   5.  NodeSimilarity layout         (resort + clustered modes)
 #   6.  HierDAG layout                (pointUp true/false, DAG networks only)
 #   7.  NodeCluster layout            (requires .na attribute file)
-#   8.  ControlTop layout             (ctrl/target mode combos)
+#   8.  ControlTop layout             (ctrl/target mode combos + deep variants)
 #   9.  SetLayout                     (belongs_to/contains, directed bipartite)
-#   10. WorldBank layout              (hub-spoke grouping)
+#   10. WorldBank layout              (hub-spoke grouping; none configured)
 #   11. Fixed-order import            (NOA/EDA files)
 #   12. Subnetwork extraction         (extract subset of nodes)
 #   13. Display option permutations   (drain zones, color levels)
+#   13b. Graph analysis               (components, topo sort, degree)
+#   13c. Cycle & Jaccard analysis     (Rust-only goldens)
 #   14. Alignment                     (merge two networks)
+#   16b. BIF round-trip               (publication BIFs copied as goldens)
 #
 # Golden files are written to tests/parity/goldens/<variant-name>/.
 #
@@ -32,9 +35,9 @@
 #   ./tests/parity/generate_goldens.sh --layouts-only    # only P5-P10 (layout algos)
 #   ./tests/parity/generate_goldens.sh --fixed-only      # only P11 (fixed-order)
 #   ./tests/parity/generate_goldens.sh --analysis-only   # only P12 (subnetwork extraction)
-#   ./tests/parity/generate_goldens.sh --graph-analysis-only # only P13b (components/topo/degree)
+#   ./tests/parity/generate_goldens.sh --graph-analysis-only # only P13b/13c (analysis goldens)
 #   ./tests/parity/generate_goldens.sh --display-only    # only P13 (display options)
-#   ./tests/parity/generate_goldens.sh --align-only      # only P14 (alignment)
+#   ./tests/parity/generate_goldens.sh --align-only      # only P14 + P16b (alignment + BIF round-trip)
 #
 # The first run takes a few minutes to compile BioFabric inside Docker.
 # Subsequent runs reuse the cached image and are fast.
