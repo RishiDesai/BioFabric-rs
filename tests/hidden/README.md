@@ -1,0 +1,83 @@
+# Hidden Test Suite
+
+This directory contains **hidden** parity tests used to grade agent submissions.
+These tests are **not** provided to the agent — they exercise the same code paths
+as the public `tests/parity/` suite but on held-out networks and alignments.
+
+## Purpose
+
+When packaging the biofabric-rs rewrite as a long-horizon task:
+
+- The agent receives the full **public** test suite (`tests/parity/`) and can use
+  it to iteratively develop and debug its implementation.
+- The hidden tests here are used by the evaluator to verify correctness on unseen
+  data. An agent passes only if **both** public and hidden tests pass.
+
+## Test Data
+
+Four new input files (not present in the public test suite):
+
+| File | Type | Description |
+|------|------|-------------|
+| `MMusculus.gw` | GW network | Mouse PPI network (4,370 nodes) |
+| `AThaliana.gw` | GW network | Arabidopsis PPI network (5,897 nodes) |
+| `MMusculus-AThaliana.align` | Alignment | Cross-species alignment (4,370 mappings) |
+| `CaseStudy-III-y2kr-SC-s3-0.005-importance-0.995.0.align` | Alignment | Yeast↔SC alignment with S3=0.005/importance=0.995 weights (2,379 mappings) |
+
+## Test Cases
+
+The hidden suite covers the same features as the public tests:
+
+1. **GW parsing + default layout** — MMusculus standalone (NOA, EDA, BIF)
+2. **GW parsing + default layout** — AThaliana standalone (NOA, EDA, BIF)
+3. **GW parsing + no-shadow layout** — MMusculus without shadows (NOA, EDA, BIF)
+4. **Cross-species alignment** — MMusculus ↔ AThaliana (NOA, EDA, BIF, scores)
+5. **Alternative yeast alignment** — Yeast2KReduced ↔ SC with different objective weights (NOA, EDA, BIF, scores)
+6. **Alignment orphan view** — MMusculus ↔ AThaliana orphan edges (NOA, EDA, BIF)
+
+## Evaluator Setup
+
+The hidden test file (`hidden_tests.rs`) lives in this directory and must be
+copied into the Cargo test location before running:
+
+```bash
+# 1. Copy the test file where Cargo can discover it
+cp tests/hidden/hidden_tests.rs crates/core/tests/hidden_tests.rs
+
+# 2. Generate goldens (first time only)
+cargo test --test hidden_tests generate_goldens -- --ignored --nocapture
+
+# 3. Run the hidden tests
+cargo test --test hidden_tests
+```
+
+This keeps everything in a single directory (`tests/hidden/`) that can be
+excluded from the agent's view and injected by the evaluator at test time.
+
+## Golden Generation
+
+Goldens are generated using the working Rust implementation (same approach as the
+public suite's `generate_goldens` test). The generation command above writes
+golden files to `tests/hidden/goldens/`.
+
+## Directory Structure
+
+```
+tests/hidden/
+├── README.md                   # This file
+├── hidden_tests.rs             # Test file (evaluator copies to crates/core/tests/)
+├── networks/
+│   ├── gw/
+│   │   ├── MMusculus.gw        # Mouse PPI (4,370 nodes)
+│   │   └── AThaliana.gw        # Arabidopsis PPI (5,897 nodes)
+│   └── align/
+│       ├── MMusculus-AThaliana.align
+│       └── CaseStudy-III-y2kr-SC-s3-0.005-importance-0.995.0.align
+└── goldens/                    # Generated reference outputs
+    ├── hidden_mmus_default/
+    ├── hidden_atha_default/
+    ├── hidden_mmus_noshadow/
+    ├── hidden_align_mmus_atha/
+    ├── hidden_align_yeast_sc_s3_005/
+    └── hidden_align_mmus_atha_orphan/
+```
