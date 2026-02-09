@@ -261,65 +261,163 @@ impl RenderOutput {
     /// - Uses `link.column_no_shadows` and `node.{min_col_no_shadows, max_col_no_shadows}`
     /// - Uses `layout.link_annotations_no_shadows` for link annotation ranges
     pub fn extract(
-        _layout: &NetworkLayout,
-        _params: &RenderParams,
-        _palette: &super::color::ColorPalette,
+        layout: &NetworkLayout,
+        params: &RenderParams,
+        palette: &super::color::ColorPalette,
     ) -> Self {
-        // TODO: Implement render extraction
-        //
-        // let show_shadows = params.show_shadows;
-        //
-        // PHASE 0 — ANNOTATIONS
-        //
-        // 0a. For each node annotation in layout.node_annotations:
-        //     - The annotation spans rows [start, end]
-        //     - Full width of the layout (0..column_count or 0..column_count_no_shadows)
-        //     - Parse annotation.color as FabricColor (with transparency)
-        //     - Viewport cull: skip if row range doesn't overlap viewport
-        //     - Push RectInstance { x: 0, y: start, w: total_cols, h: end-start+1, color }
-        //
-        // 0b. For each link annotation:
-        //     - Select annotation set: link_annotations or link_annotations_no_shadows
-        //     - The annotation spans columns [start, end]
-        //     - Full height of the layout (0..row_count)
-        //     - Viewport cull: skip if column range doesn't overlap viewport
-        //     - Push RectInstance { x: start, y: 0, w: end-start+1, h: row_count, color }
-        //
-        // PHASE 1 — NODES
-        //
-        // 1. For each node in layout:
-        //    a. Select column span based on shadow mode
-        //    b. Viewport cull
-        //    c. LOD cull
-        //    d. Clip the horizontal span to the viewport
-        //    e. Look up color from palette using node.color_index
-        //    f. Push LineInstance { x0: clipped_min, y0: row, x1: clipped_max, y1: row, color }
-        //
-        // PHASE 2 — LINKS
-        //
-        // 2. For each link in layout:
-        //    a. If !show_shadows && link.is_shadow: skip
-        //    b. Select column (shadow-on or shadow-off)
-        //    c. Viewport cull
-        //    d. LOD cull
-        //    e. Clip the vertical span to the viewport
-        //    f. Look up color from palette
-        //    g. Push LineInstance { x0: col, y0: clipped_top, x1: col, y1: clipped_bottom, color }
-        //
-        // PHASE 3 — LABELS (when display options enable them)
-        //
-        // 3. If show_node_labels:
-        //    a. For each visible node, create a TextLabel at (min_col - label_offset, row)
-        //    b. Font size ~ 0.8 grid units (scales with zoom)
-        //
-        // 4. If show_link_labels:
-        //    a. For each visible link, create a TextLabel at (col, top_row - label_offset)
-        //
-        // PHASE 4 — RETURN
-        //
-        // Return RenderOutput { node_annotations, link_annotations, links, nodes, labels }
-        //
-        todo!("Implement render extraction with annotations + viewport culling + LOD + shadow awareness + labels")
+        let show_shadows = params.show_shadows;
+        let vp = &params.viewport;
+        let decimation = params.lod.decimation_factor(params.pixels_per_grid_unit);
+        let total_cols = if show_shadows {
+            layout.column_count
+        } else {
+            layout.column_count_no_shadows
+        } as f32;
+
+        // ---- PHASE 0: ANNOTATIONS ----
+
+        let mut node_annotations = RectBatch::with_capacity(layout.node_annotations.len());
+        for ann in layout.node_annotations.iter() {
+            let y0 = ann.start as f64;
+            let y1 = ann.end as f64;
+            // Viewport cull on row range
+            if y1 < vp.y || y0 > vp.bottom() {
+                continue;
+            }
+            let color = parse_annotation_color(&ann.color);
+            node_annotations.push(RectInstance {
+                x: 0.0,
+                y: ann.start as f32,
+                w: total_cols,
+                h: (ann.end - ann.start + 1) as f32,
+                color,
+            });
+        }
+
+        let link_ann_set = if show_shadows {
+            &layout.link_annotations
+        } else {
+            &layout.link_annotations_no_shadows
+        };
+        let mut link_annotations = RectBatch::with_capacity(link_ann_set.len());
+        for ann in link_ann_set.iter() {
+            let x0 = ann.start as f64;
+            let x1 = ann.end as f64;
+            if x1 < vp.x || x0 > vp.right() {
+                continue;
+            }
+            let color = parse_annotation_color(&ann.color);
+            link_annotations.push(RectInstance {
+                x: ann.start as f32,
+                y: 0.0,
+                w: (ann.end - ann.start + 1) as f32,
+                h: layout.row_count as f32,
+                color,
+            });
+        }
+
+        // ---- PHASE 1: NODES ----
+
+        let mut nodes = LineBatch::with_capacity(layout.nodes.len());
+        for (i, (_nid, nl)) in layout.nodes.iter().enumerate() {
+            if decimation > 1 && i % decimation != 0 {
+                continue;
+            }
+            let (min_c, max_c, has) = if show_shadows {
+                (nl.min_col, nl.max_col, nl.has_edges())
+            } else {
+                (nl.min_col_no_shadows, nl.max_col_no_shadows, nl.has_edges_no_shadows())
+            };
+            if !has {
+                continue;
+            }
+            let row = nl.row as f64;
+            let min_cf = min_c as f64;
+            let max_cf = max_c as f64;
+            if !vp.intersects_node(row, min_cf, max_cf) {
+                continue;
+            }
+            // Clip to viewport
+            let x0 = (min_cf.max(vp.x)) as f32;
+            let x1 = (max_cf.min(vp.right())) as f32;
+            let color = palette.get(nl.color_index);
+            nodes.push(LineInstance {
+                x0,
+                y0: nl.row as f32,
+                x1,
+                y1: nl.row as f32,
+                color,
+            });
+        }
+
+        // ---- PHASE 2: LINKS ----
+
+        let mut links = LineBatch::with_capacity(layout.links.len());
+        for (i, ll) in layout.links.iter().enumerate() {
+            if !show_shadows && ll.is_shadow {
+                continue;
+            }
+            if decimation > 1 && i % decimation != 0 {
+                continue;
+            }
+            let col = if show_shadows {
+                ll.column
+            } else {
+                match ll.column_no_shadows {
+                    Some(c) => c,
+                    None => continue, // shadow link in no-shadow mode
+                }
+            };
+            let col_f = col as f64;
+            let top = ll.top_row() as f64;
+            let bot = ll.bottom_row() as f64;
+            if !vp.intersects_link(col_f, top, bot) {
+                continue;
+            }
+            // Clip to viewport
+            let y0 = (top.max(vp.y)) as f32;
+            let y1 = (bot.min(vp.bottom())) as f32;
+            let color = palette.get(ll.color_index);
+            links.push(LineInstance {
+                x0: col as f32,
+                y0,
+                x1: col as f32,
+                y1,
+                color,
+            });
+        }
+
+        // ---- PHASE 3: LABELS (skipped for image export — no text rasterizer yet) ----
+
+        Self {
+            node_annotations,
+            link_annotations,
+            links,
+            nodes,
+            labels: TextBatch::new(),
+        }
+    }
+}
+
+/// Parse an annotation color string (hex like `"#RRGGBB"` or `"#RRGGBBAA"`)
+/// into a [`FabricColor`]. Falls back to a semi-transparent gray if unparseable.
+fn parse_annotation_color(hex: &str) -> FabricColor {
+    let hex = hex.trim_start_matches('#');
+    match hex.len() {
+        6 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(200);
+            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(200);
+            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(200);
+            FabricColor::rgba(r, g, b, 64)
+        }
+        8 => {
+            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(200);
+            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(200);
+            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(200);
+            let a = u8::from_str_radix(&hex[6..8], 16).unwrap_or(64);
+            FabricColor::rgba(r, g, b, a)
+        }
+        _ => FabricColor::rgba(200, 200, 200, 64),
     }
 }
 
