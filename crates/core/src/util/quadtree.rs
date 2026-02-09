@@ -64,6 +64,7 @@ pub struct QuadTree<T> {
     /// Child quadrants (NW, NE, SW, SE). `None` if this is a leaf.
     children: Option<Box<[QuadTree<T>; 4]>>,
     /// Current depth.
+    #[allow(dead_code)]
     depth: usize,
 }
 

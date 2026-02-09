@@ -58,29 +58,35 @@ gen() {
 # =========================================================================
 # Phase 1: Default layout + shadows ON (baseline)
 # =========================================================================
-echo "=== Phase 1: Default layout, shadows ON ==="
+echo "=== Phase 1: Default layout + shadows ON ==="
 
-SIF_DEFAULTS="single_node single_edge triangle self_loop isolated_nodes disconnected_components multi_relation dense_clique linear_chain"
-for name in $SIF_DEFAULTS; do
-    gen "${name}_default" "$SIF/${name}.sif"
+for f in "$SIF"/*.sif; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .sif)"
+    gen "${name}_default" "$f"
 done
 
-GW_DEFAULTS="triangle directed_triangle CElegans"
-for name in $GW_DEFAULTS; do
-    gen "${name}_gw_default" "$GW/${name}.gw"
+for f in "$GW"/*.gw; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .gw)"
+    gen "${name}_gw_default" "$f"
 done
 
 # =========================================================================
 # Phase 2: Default layout + shadows OFF
 # =========================================================================
-echo "=== Phase 2: Default layout, shadows OFF ==="
+echo "=== Phase 2: Default layout + shadows OFF ==="
 
-for name in $SIF_DEFAULTS; do
-    gen "${name}_noshadow" "$SIF/${name}.sif" --no-shadows
+for f in "$SIF"/*.sif; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .sif)"
+    gen "${name}_noshadow" "$f" --no-shadows
 done
 
-for name in $GW_DEFAULTS; do
-    gen "${name}_gw_noshadow" "$GW/${name}.gw" --no-shadows
+for f in "$GW"/*.gw; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .gw)"
+    gen "${name}_gw_noshadow" "$f" --no-shadows
 done
 
 # =========================================================================
@@ -193,6 +199,12 @@ for lm in belongs_to contains; do
 done
 
 # =========================================================================
+# Phase 10: WorldBank layout
+# =========================================================================
+echo "=== Phase 10: WorldBank layout ==="
+echo "  (no WorldBank networks configured)"
+
+# =========================================================================
 # Phase 11: Fixed-order import (NOA/EDA files)
 # =========================================================================
 echo "=== Phase 11: Fixed-order import ==="
@@ -237,9 +249,9 @@ for name in $DEG_NETS; do
 done
 
 # =========================================================================
-# Phase 14: Display option permutations
+# Phase 13: Display option permutations
 # =========================================================================
-echo "=== Phase 14: Display options ==="
+echo "=== Phase 13: Display options ==="
 
 gen "triangle_drain0" "$SIF/triangle.sif" --min-drain-zone 0
 gen "triangle_drain5" "$SIF/triangle.sif" --min-drain-zone 5
@@ -251,9 +263,9 @@ gen "multi_relation_drain0" "$SIF/multi_relation.sif" --min-drain-zone 0
 gen "multi_relation_drain5" "$SIF/multi_relation.sif" --min-drain-zone 5
 
 # =========================================================================
-# Phase 15: Alignment tests
+# Phase 14: Alignment tests
 # =========================================================================
-echo "=== Phase 15: Alignment ==="
+echo "=== Phase 14: Alignment ==="
 
 gen "align_perfect" "$SIF/align_net1.sif" \
     --align "$SIF/align_net2.sif" "/align/test_perfect.align" \
@@ -347,12 +359,12 @@ if [ -d "$BIF_DIR" ]; then
 fi
 
 # =========================================================================
-# Phase 13: Cycle detection & Jaccard analysis (Rust-only, not from Java)
+# Phase 13c: Cycle detection & Jaccard analysis (Rust-only, not from Java)
 #
 # These are deterministic values computed by the Rust analysis module.
 # They're NOT Java GoldenGenerator outputs — just expected constants.
 # =========================================================================
-echo "=== Phase 13: Cycle & Jaccard analysis goldens ==="
+echo "=== Phase 13c: Cycle & Jaccard analysis goldens ==="
 
 write_analysis_golden() {
     local name="$1"

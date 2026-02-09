@@ -919,7 +919,6 @@ fn parse_bif_xml(xml: &str) -> Result<Session, ParseError> {
                 min_col_sha,
                 max_col_sha,
                 color_index,
-                color_key,
                 plain_drain_zones: Vec::new(),
                 shadow_drain_zones: Vec::new(),
             };
@@ -1263,7 +1262,6 @@ struct ParsedNode {
     min_col_sha: usize,
     max_col_sha: usize,
     color_index: usize,
-    color_key: String,
     plain_drain_zones: Vec<(usize, usize)>,
     shadow_drain_zones: Vec<(usize, usize)>,
 }
