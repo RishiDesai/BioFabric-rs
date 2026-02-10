@@ -1,113 +1,36 @@
 # BioFabric-rs
 
-A Rust rewrite of [BioFabric](https://github.com/wjrl/BioFabric) and the [VISNAB](https://github.com/wjrl/AlignmentPlugin) network alignment plugin. This project aims to provide a high-performance, memory-efficient implementation of BioFabric's visualization techniques, currently focusing on a robust core library and a feature-rich command-line interface.
+A Rust rewrite of [BioFabric](https://github.com/wjrl/BioFabric) and the [VISNAB](https://github.com/wjrl/AlignmentPlugin) network alignment plugin. This project aims to provide a high-performance, memory-efficient implementation of BioFabric's visualization techniques.
 
 ## Overview
 
 BioFabric uses a unique visualization approach:
 
-- **Nodes** are horizontal lines, each at a distinct row
-- **Edges** are vertical line segments connecting two node rows
-- **Node span** extends horizontally from its leftmost to rightmost incident edge
+- **Nodes** are horizontal lines
+- **Edges** are vertical line segments connecting two node lines
 
 This eliminates the "hairball" problem of traditional node-link diagrams and scales to very large networks.
 
 ## Project Structure
 
-This is a Cargo workspace containing the following crates:
+This is a Cargo workspace:
 
 ```
 biofabric-rs/
 ├── crates/
-│   ├── core/              # biofabric-core  — pure computation library
-│   │   └── src/
-│   │       ├── model/     # Network, Node, Link, Annotation
-│   │       ├── io/        # Parsers: SIF, GW, .align, JSON, XML
-│   │       ├── layout/    # 7 layout algorithms + traits
-│   │       ├── alignment/ # Network alignment
-│   │       ├── analysis/  # BFS, DFS, components, cycles
-│   │       ├── render/    # Colors, bucket renderer, tiles
-│   │       └── util/      # Quadtree, data helpers
-│   ├── cli/               # biofabric       — command-line tool
-│   └── wasm/              # biofabric-wasm  — WebAssembly bindings (In Progress)
-├── web/                   # Web frontend (Planned)
+│   ├── core/    # biofabric-core — pure computation library
+│   └── cli/     # biofabric      — command-line tool
 ```
 
-## Module Status
+## Building
 
-The current implementation focuses on the `core` library and `cli` tool.
-
-### Core Library
-
-| Module | Status | Description |
-|--------|--------|-------------|
-| `model` | Complete | Network, Node, Link, Annotation types |
-| `io::sif` | Complete | SIF file parser/writer |
-| `io::gw` | Complete | GW (LEDA) file parser/writer |
-| `io::align` | Complete | .align file parser |
-| `io::json` | Complete | JSON import/export |
-| `io::xml` | Complete | BioFabric XML session format |
-| `io::order` | Complete | Node/link order import/export |
-| `io::attribute` | Stub | Node attribute loader (TSV) |
-| `layout::default` | Complete | Default BFS node layout + edge layout |
-| `layout::similarity` | Complete | Node similarity (Jaccard) layout |
-| `layout::hierarchy` | Complete | Hierarchical DAG layout |
-| `layout::cluster` | Complete | Node cluster layout |
-| `layout::control_top` | Complete | Control-top layout |
-| `layout::set` | Complete | Set membership layout |
-| `layout::world_bank` | Complete | Hub-spoke layout |
-| `alignment::types` | Complete | NodeColor, EdgeType, MergedNodeId |
-| `alignment::merge` | Complete | Network merging via alignment |
-| `alignment::scoring` | Complete | EC, S3, ICS, NC, NGS, LGS, JS |
-| `alignment::groups` | Complete | Node group classification |
-| `alignment::cycle` | Complete | Alignment cycle/path detection |
-| `alignment::layout` | Complete | GROUP, ORPHAN, CYCLE layout modes |
-| `analysis::graph` | Complete | BFS, DFS, connected components |
-| `analysis::cycle` | Complete | Cycle detection in directed graphs |
-| `render::color` | Complete | Color palette generation |
-| `render::gpu_data` | Complete | Render data extraction for GPU/WebGL |
-| `export::image` | Complete | Image export (PNG, JPEG, TIFF) |
-| `util::quadtree` | Stub | Spatial indexing |
-
-### CLI
-
-The `biofabric` CLI provides a comprehensive suite of tools for working with BioFabric networks.
-
+```bash
+cargo build
 ```
-biofabric layout        <input>  [--algorithm default|similarity|...] [-o layout.json]
-biofabric render        <input>  [--width 1920] [--height 0] [-o output.png]
-biofabric info          <input>  [--all] [--format text|json]
-biofabric convert       <input>  --format sif|gw|json|xml [-o output]
-biofabric align         <g1> <g2> <align> [--layout group|orphan|cycle] [--score] [--json]
-biofabric compare       <input>  <nodeA> <nodeB> [--format text|json]
-biofabric extract       <input>  --node <center> [--hops N] [-o output]
-biofabric export-order  <input>  [--what nodes|links] [-o output]
-biofabric search        <input>  <pattern> [--regex] [-i] [--target nodes|relations|both]
-```
-
-Global flag: `--quiet` suppresses non-essential stderr output.
 
 ## Testing
 
-The project has a comprehensive test suite (~386 test functions) organized into three suites:
-
-| Suite | File | Tests | Purpose |
-|-------|------|-------|---------|
-| Parity | `crates/core/tests/parity_tests.rs` | 267 | Byte-level parity with Java BioFabric |
-| Analysis | `crates/core/tests/analysis_tests.rs` | 65 | Graph analysis operations |
-| CLI | `crates/cli/tests/cli_tests.rs` | 54 | End-to-end CLI integration |
-
-Parity tests compare Rust output against golden files generated by the original Java BioFabric tool. Golden files must be generated before running:
-
-```bash
-# Generate goldens (Docker-based, first run takes a few minutes)
-./tests/parity/generate_goldens.sh
-
-# Or generate using the Rust implementation (faster)
-cargo test --test parity_tests generate_goldens -- --ignored --nocapture
-```
-
-Running tests:
+See `tests/parity/README.md` for detailed test documentation.
 
 ```bash
 # All tests (requires goldens)
@@ -121,19 +44,6 @@ cargo test --test analysis_tests
 
 # CLI integration tests
 cargo test --test cli_tests
-
-```
-
-See `tests/parity/README.md` for detailed test documentation.
-
-## Building
-
-```bash
-# Build all Rust crates
-cargo build
-
-# Run tests
-cargo test
 ```
 
 ## References
