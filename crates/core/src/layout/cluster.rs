@@ -302,7 +302,6 @@ impl EdgeLayout for NodeClusterEdgeLayout {
         "Node Cluster Edge Layout"
     }
 }
-
 impl NodeClusterEdgeLayout {
     /// Rearrange links so inter-cluster edges appear between cluster regions.
     ///
@@ -423,3 +422,4 @@ impl NodeClusterEdgeLayout {
         layout.column_count_no_shadows = col_assigner.column_count_no_shadows();
     }
 }
+

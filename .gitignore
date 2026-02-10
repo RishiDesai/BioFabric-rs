@@ -21,3 +21,7 @@ Cargo.lock
 # gracefully skip when goldens are missing.
 tests/parity/goldens/*
 !tests/parity/goldens/.gitkeep
+
+# Hidden golden files — regenerate with: ./tests/hidden/generate_goldens.sh
+tests/hidden/goldens/*
+!tests/hidden/goldens/.gitkeep
