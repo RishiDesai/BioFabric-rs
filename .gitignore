@@ -21,3 +21,5 @@ Cargo.lock
 # gracefully skip when goldens are missing.
 tests/parity/goldens/*
 !tests/parity/goldens/.gitkeep
+tests/hidden/goldens/*
+!tests/hidden/goldens/.gitkeep
