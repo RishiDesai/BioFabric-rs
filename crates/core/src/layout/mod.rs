@@ -41,7 +41,7 @@ pub mod world_bank;
 pub use build_data::{AlignmentBuildData, LayoutBuildData};
 pub use cluster::NodeClusterLayout;
 pub use control_top::ControlTopLayout;
-pub use default::{DefaultEdgeLayout, DefaultNodeLayout};
+pub use default::{layout_from_fixed_link_order, DefaultEdgeLayout, DefaultNodeLayout};
 pub use hierarchy::HierDAGLayout;
 pub use link_group::{ColumnAssigner, LinkGroup, LinkGroupIndex, LinkSortKey};
 pub use result::{LinkLayout, NetworkLayout, NodeLayout as NodeLayoutInfo};

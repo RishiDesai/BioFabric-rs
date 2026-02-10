@@ -7,7 +7,11 @@
 # Docker build or CI environment where the Java classes have already
 # been compiled.
 #
-# Phases mirror generate_goldens.sh:
+# Test suites mirror generate_goldens.sh:
+#   - Default, ShadowToggle, LinkGrouping, NodeSimilarity, HierDAG,
+#     NodeCluster, ControlTop, SetLayout, WorldBank, FixedOrder,
+#     SubnetworkExtraction, GraphAnalysis, DisplayOptions, Alignment,
+#     BIFRoundtrip, CycleJaccard
 #
 # Prerequisites:
 #   - Java classes at $JAVA_CP (default: /build/classes)
@@ -58,9 +62,9 @@ gen() {
 }
 
 # =========================================================================
-# Phase 1: Default layout + shadows ON (baseline)
+# Default: Baseline layout with shadows ON
 # =========================================================================
-echo "=== Phase 1: Default layout + shadows ON ==="
+echo "=== Default: Baseline layout with shadows ON ==="
 
 for f in "$SIF"/*.sif; do
     [ -f "$f" ] || continue
@@ -75,9 +79,9 @@ for f in "$GW"/*.gw; do
 done
 
 # =========================================================================
-# Phase 2: Default layout + shadows OFF
+# ShadowToggle: Default layout with shadows OFF
 # =========================================================================
-echo "=== Phase 2: Default layout + shadows OFF ==="
+echo "=== ShadowToggle: Default layout with shadows OFF ==="
 
 for f in "$SIF"/*.sif; do
     [ -f "$f" ] || continue
@@ -92,9 +96,9 @@ for f in "$GW"/*.gw; do
 done
 
 # =========================================================================
-# Phase 3: Link grouping variants
+# LinkGrouping: Link grouping variants
 # =========================================================================
-echo "=== Phase 3: Link grouping ==="
+echo "=== LinkGrouping: Link grouping variants ==="
 
 gen "multi_relation_pernode" "$SIF/multi_relation.sif" \
     --link-groups "pp,pd,gi" --group-mode per_node
@@ -106,9 +110,9 @@ gen "directed_triangle_gw_pernetwork" "$GW/directed_triangle.gw" \
     --link-groups "activates,inhibits" --group-mode per_network
 
 # =========================================================================
-# Phase 5: NodeSimilarity layout (resort + clustered)
+# NodeSimilarity: Similarity-based layout (resort + clustered)
 # =========================================================================
-echo "=== Phase 5: NodeSimilarity ==="
+echo "=== NodeSimilarity: Similarity-based layout ==="
 
 for mode in resort clustered; do
     for net in triangle multi_relation; do
@@ -118,9 +122,9 @@ for mode in resort clustered; do
 done
 
 # =========================================================================
-# Phase 6: HierDAG layout (pointUp true/false)
+# HierDAG: Hierarchical DAG layout (pointUp true/false)
 # =========================================================================
-echo "=== Phase 6: HierDAG ==="
+echo "=== HierDAG: Hierarchical DAG layout ==="
 
 for dag in dag_simple dag_diamond dag_deep; do
     for pt in true false; do
@@ -130,17 +134,17 @@ for dag in dag_simple dag_diamond dag_deep; do
 done
 
 # =========================================================================
-# Phase 7: NodeCluster layout
+# NodeCluster: Cluster-based layout
 # =========================================================================
-echo "=== Phase 7: NodeCluster ==="
+echo "=== NodeCluster: Cluster-based layout ==="
 
 gen "multi_relation_node_cluster" "$SIF/multi_relation.sif" \
     --layout node_cluster --attribute-file "/na/multi_relation_clusters.na"
 
 # =========================================================================
-# Phase 8: ControlTop layout
+# ControlTop: Control-target layout
 # =========================================================================
-echo "=== Phase 8: ControlTop ==="
+echo "=== ControlTop: Control-target layout ==="
 
 # multi_relation: 4 ctrl/target combos
 for cm in fixed_list degree_only; do
@@ -164,9 +168,9 @@ gen "triangle_controltop_degree_only_degree_odometer" "$SIF/triangle.sif" \
     --layout control_top --control-mode degree_only --target-mode degree_odometer
 
 # =========================================================================
-# Phase 7b: NodeCluster deep variants (ordering + placement)
+# NodeCluster: Advanced variants (ordering + placement)
 # =========================================================================
-echo "=== Phase 7b: NodeCluster deep variants ==="
+echo "=== NodeCluster: Advanced variants ==="
 
 gen "multi_relation_cluster_linksize_between" "$SIF/multi_relation.sif" \
     --layout node_cluster --attribute-file "/na/multi_relation_clusters.na" \
@@ -179,9 +183,9 @@ gen "multi_relation_cluster_name_inline" "$SIF/multi_relation.sif" \
     --cluster-order name --cluster-placement inline
 
 # =========================================================================
-# Phase 5c: NodeSimilarity deep variants (custom parameters)
+# NodeSimilarity: Advanced variants (custom parameters)
 # =========================================================================
-echo "=== Phase 5c: NodeSimilarity deep variants ==="
+echo "=== NodeSimilarity: Advanced variants ==="
 
 gen "triangle_similarity_resort_5pass" "$SIF/triangle.sif" \
     --layout similarity_resort --pass-count 5
@@ -191,9 +195,9 @@ gen "triangle_similarity_clustered_chain5" "$SIF/triangle.sif" \
     --layout similarity_clustered --chain-length 5
 
 # =========================================================================
-# Phase 9: SetLayout (directed bipartite networks)
+# SetLayout: Directed bipartite networks
 # =========================================================================
-echo "=== Phase 9: SetLayout ==="
+echo "=== SetLayout: Directed bipartite networks ==="
 
 for lm in belongs_to contains; do
     gen "bipartite_set_${lm}" "$SIF/bipartite.sif" \
@@ -201,15 +205,15 @@ for lm in belongs_to contains; do
 done
 
 # =========================================================================
-# Phase 10: WorldBank layout
+# WorldBank: Hub-spoke grouping layout
 # =========================================================================
-echo "=== Phase 10: WorldBank layout ==="
+echo "=== WorldBank: Hub-spoke grouping layout ==="
 echo "  (no WorldBank networks configured)"
 
 # =========================================================================
-# Phase 11: Fixed-order import (NOA/EDA files)
+# FixedOrder: Fixed-order import (NOA/EDA files)
 # =========================================================================
-echo "=== Phase 11: Fixed-order import ==="
+echo "=== FixedOrder: Fixed-order import ==="
 
 gen "triangle_fixed_noa" "$SIF/triangle.sif" \
     --noa-file "/noa/triangle_reversed.noa"
@@ -219,18 +223,18 @@ gen "triangle_fixed_eda" "$SIF/triangle.sif" \
     --eda-file "/eda/triangle_reversed.eda"
 
 # =========================================================================
-# Phase 12: Subnetwork extraction
+# SubnetworkExtraction: Extract subset of nodes
 # =========================================================================
-echo "=== Phase 12: Subnetwork extraction ==="
+echo "=== SubnetworkExtraction: Extract subset of nodes ==="
 
 gen "triangle_extract_AB" "$SIF/triangle.sif" --extract-nodes "A,B"
 gen "multi_relation_extract_ACE" "$SIF/multi_relation.sif" --extract-nodes "A,C,E"
 gen "dense_clique_extract_ABC" "$SIF/dense_clique.sif" --extract-nodes "A,B,C"
 
 # =========================================================================
-# Phase 13b: Graph analysis (components, topo sort, degree)
+# GraphAnalysis: Graph analysis (components, topo sort, degree)
 # =========================================================================
-echo "=== Phase 13b: Graph analysis ==="
+echo "=== GraphAnalysis: Graph analysis operations ==="
 
 echo "--- Connected components ---"
 COMP_NETS="single_node single_edge triangle self_loop isolated_nodes disconnected_components linear_chain dense_clique multi_relation bipartite"
@@ -251,9 +255,9 @@ for name in $DEG_NETS; do
 done
 
 # =========================================================================
-# Phase 13: Display option permutations
+# DisplayOptions: Display option permutations
 # =========================================================================
-echo "=== Phase 13: Display options ==="
+echo "=== DisplayOptions: Display option permutations ==="
 
 gen "triangle_drain0" "$SIF/triangle.sif" --min-drain-zone 0
 gen "triangle_drain5" "$SIF/triangle.sif" --min-drain-zone 5
@@ -265,9 +269,9 @@ gen "multi_relation_drain0" "$SIF/multi_relation.sif" --min-drain-zone 0
 gen "multi_relation_drain5" "$SIF/multi_relation.sif" --min-drain-zone 5
 
 # =========================================================================
-# Phase 14: Alignment tests
+# Alignment: Network alignment and comparison
 # =========================================================================
-echo "=== Phase 14: Alignment ==="
+echo "=== Alignment: Network alignment and comparison ==="
 
 gen "align_perfect" "$SIF/align_net1.sif" \
     --align "$SIF/align_net2.sif" "/align/test_perfect.align" \
@@ -289,9 +293,9 @@ gen "align_yeast_sc_s3_pure" "$SIF/Yeast2KReduced.sif" \
     --perfect-align "/align/yeast_sc_perfect.align"
 
 # =========================================================================
-# Phase 17: Alignment view type variants
+# Alignment: View type variants
 # =========================================================================
-echo "=== Phase 17: Alignment views ==="
+echo "=== Alignment: View type variants ==="
 
 # Orphan views
 gen "align_casestudy_iv_orphan" "$GW/CaseStudy-IV-SmallYeast.gw" \
@@ -331,9 +335,9 @@ gen "align_casestudy_iv_ng_nc" "$GW/CaseStudy-IV-SmallYeast.gw" \
     --perfect-align "/align/casestudy_iv.align" --ng-mode node_correctness
 
 # =========================================================================
-# Phase 16b: BIF round-trip (copy publication BIF as golden)
+# BIFRoundtrip: BIF serialization/deserialization (copy publication BIF as golden)
 # =========================================================================
-echo "=== Phase 16b: BIF round-trip ==="
+echo "=== BIFRoundtrip: BIF serialization/deserialization ==="
 
 if [ -d "$BIF_DIR" ]; then
     for bifname in CaseStudy-III-Perfect CaseStudy-III-All-S3 CaseStudy-III-All-Importance CaseStudy-III-P05S3; do
@@ -361,12 +365,12 @@ if [ -d "$BIF_DIR" ]; then
 fi
 
 # =========================================================================
-# Phase 13c: Cycle detection & Jaccard analysis (Rust-only, not from Java)
+# CycleJaccard: Cycle detection & Jaccard similarity (Rust-only, not from Java)
 #
 # These are deterministic values computed by the Rust analysis module.
 # They're NOT Java GoldenGenerator outputs — just expected constants.
 # =========================================================================
-echo "=== Phase 13c: Cycle & Jaccard analysis goldens ==="
+echo "=== CycleJaccard: Cycle detection & Jaccard similarity ==="
 
 write_analysis_golden() {
     local name="$1"

@@ -6,38 +6,39 @@
 # GoldenGenerator against every .sif and .gw file in tests/parity/networks/.
 # Each network is tested with multiple configuration variants:
 #
-#   1.  Default layout + shadows ON   (baseline)
-#   2.  Default layout + shadows OFF  (shadow toggle test)
-#   3.  Link grouping variants        (for multi-relation networks only)
-#   5.  NodeSimilarity layout         (resort + clustered modes)
-#   6.  HierDAG layout                (pointUp true/false, DAG networks only)
-#   7.  NodeCluster layout            (requires .na attribute file)
-#   8.  ControlTop layout             (ctrl/target mode combos + deep variants)
-#   9.  SetLayout                     (belongs_to/contains, directed bipartite)
-#   10. WorldBank layout              (hub-spoke grouping; none configured)
-#   11. Fixed-order import            (NOA/EDA files)
-#   12. Subnetwork extraction         (extract subset of nodes)
-#   13. Display option permutations   (drain zones, color levels)
-#   13b. Graph analysis               (components, topo sort, degree)
-#   13c. Cycle & Jaccard analysis     (Rust-only goldens)
-#   14. Alignment                     (merge two networks)
-#   16b. BIF round-trip               (publication BIFs copied as goldens)
+# Test Suites:
+#   - Default (baseline with shadows)
+#   - ShadowToggle (shadows OFF)
+#   - LinkGrouping (per-node/per-network grouping for multi-relation networks)
+#   - NodeSimilarity (resort + clustered layout modes)
+#   - HierDAG (hierarchical DAG layout, pointUp variants)
+#   - NodeCluster (cluster-based layout with .na attribute files)
+#   - ControlTop (control-target layout with multiple mode combinations)
+#   - SetLayout (bipartite set layout, belongs_to/contains)
+#   - WorldBank (hub-spoke grouping; none configured)
+#   - FixedOrder (NOA/EDA fixed-order import)
+#   - SubnetworkExtraction (extract subset of nodes)
+#   - DisplayOptions (drain zones, color levels)
+#   - GraphAnalysis (components, topo sort, degree)
+#   - CycleJaccard (Rust-only cycle detection & Jaccard similarity)
+#   - Alignment (network merging and comparison)
+#   - BIFRoundtrip (publication BIF serialization/deserialization)
 #
 # Golden files are written to tests/parity/goldens/<variant-name>/.
 #
 # Usage:
-#   ./tests/parity/generate_goldens.sh             # generate all
-#   ./tests/parity/generate_goldens.sh triangle     # generate one (matches name)
-#   ./tests/parity/generate_goldens.sh --rebuild    # force Docker rebuild
-#   ./tests/parity/generate_goldens.sh --shadows-only    # only P1 (shadows-on)
-#   ./tests/parity/generate_goldens.sh --no-shadows-only # only P2 (shadows-off)
-#   ./tests/parity/generate_goldens.sh --groups-only     # only P3 (link grouping)
-#   ./tests/parity/generate_goldens.sh --layouts-only    # only P5-P10 (layout algos)
-#   ./tests/parity/generate_goldens.sh --fixed-only      # only P11 (fixed-order)
-#   ./tests/parity/generate_goldens.sh --analysis-only   # only P12 (subnetwork extraction)
-#   ./tests/parity/generate_goldens.sh --graph-analysis-only # only P13b/13c (analysis goldens)
-#   ./tests/parity/generate_goldens.sh --display-only    # only P13 (display options)
-#   ./tests/parity/generate_goldens.sh --align-only      # only P14 + P16b (alignment + BIF round-trip)
+#   ./tests/parity/generate_goldens.sh                    # generate all
+#   ./tests/parity/generate_goldens.sh triangle           # generate one (matches name)
+#   ./tests/parity/generate_goldens.sh --rebuild          # force Docker rebuild
+#   ./tests/parity/generate_goldens.sh --default-only     # only Default suite
+#   ./tests/parity/generate_goldens.sh --shadow-only      # only ShadowToggle suite
+#   ./tests/parity/generate_goldens.sh --groups-only      # only LinkGrouping suite
+#   ./tests/parity/generate_goldens.sh --layouts-only     # only layout suites (Similarity/DAG/Cluster/etc)
+#   ./tests/parity/generate_goldens.sh --fixed-only       # only FixedOrder suite
+#   ./tests/parity/generate_goldens.sh --subnetwork-only  # only SubnetworkExtraction suite
+#   ./tests/parity/generate_goldens.sh --graph-analysis-only  # only GraphAnalysis & CycleJaccard suites
+#   ./tests/parity/generate_goldens.sh --display-only     # only DisplayOptions suite
+#   ./tests/parity/generate_goldens.sh --align-only       # only Alignment & BIFRoundtrip suites
 #
 # The first run takes a few minutes to compile BioFabric inside Docker.
 # Subsequent runs reuse the cached image and are fast.
@@ -54,36 +55,36 @@ IMAGE_NAME="biofabric-golden"
 
 REBUILD=false
 FILTER=""
-ONLY_SHADOWS_ON=false
-ONLY_SHADOWS_OFF=false
+ONLY_DEFAULT=false
+ONLY_SHADOW=false
 ONLY_GROUPS=false
 ONLY_LAYOUTS=false
 ONLY_FIXED=false
-ONLY_ANALYSIS=false
+ONLY_SUBNETWORK=false
 ONLY_DISPLAY=false
 ONLY_ALIGN=false
 ONLY_GRAPH_ANALYSIS=false
 
 for arg in "$@"; do
     case "$arg" in
-        --rebuild)           REBUILD=true ;;
-        --shadows-only)      ONLY_SHADOWS_ON=true ;;
-        --no-shadows-only)   ONLY_SHADOWS_OFF=true ;;
-        --groups-only)       ONLY_GROUPS=true ;;
-        --layouts-only)      ONLY_LAYOUTS=true ;;
-        --fixed-only)        ONLY_FIXED=true ;;
-        --analysis-only)     ONLY_ANALYSIS=true ;;
-        --display-only)      ONLY_DISPLAY=true ;;
-        --align-only)        ONLY_ALIGN=true ;;
+        --rebuild)             REBUILD=true ;;
+        --default-only)        ONLY_DEFAULT=true ;;
+        --shadow-only)         ONLY_SHADOW=true ;;
+        --groups-only)         ONLY_GROUPS=true ;;
+        --layouts-only)        ONLY_LAYOUTS=true ;;
+        --fixed-only)          ONLY_FIXED=true ;;
+        --subnetwork-only)     ONLY_SUBNETWORK=true ;;
+        --display-only)        ONLY_DISPLAY=true ;;
+        --align-only)          ONLY_ALIGN=true ;;
         --graph-analysis-only) ONLY_GRAPH_ANALYSIS=true ;;
-        *)                   FILTER="$arg" ;;
+        *)                     FILTER="$arg" ;;
     esac
 done
 
 # Helper: check if no --*-only filter is active (run everything)
 no_only_filter() {
-    ! $ONLY_SHADOWS_ON && ! $ONLY_SHADOWS_OFF && ! $ONLY_GROUPS && \
-    ! $ONLY_LAYOUTS && ! $ONLY_FIXED && ! $ONLY_ANALYSIS && \
+    ! $ONLY_DEFAULT && ! $ONLY_SHADOW && ! $ONLY_GROUPS && \
+    ! $ONLY_LAYOUTS && ! $ONLY_FIXED && ! $ONLY_SUBNETWORK && \
     ! $ONLY_DISPLAY && ! $ONLY_ALIGN && ! $ONLY_GRAPH_ANALYSIS
 }
 
@@ -189,11 +190,11 @@ OK=0
 FAIL=0
 
 # =========================================================================
-# Phase 1: Default layout + shadows ON (baseline)
+# Default: Baseline layout with shadows ON
 # =========================================================================
 
-if no_only_filter || $ONLY_SHADOWS_ON; then
-    echo "=== Phase 1: Default layout + shadows ON ==="
+if no_only_filter || $ONLY_DEFAULT; then
+    echo "=== Default: Baseline layout with shadows ON ==="
     echo
 
     echo "--- SIF networks ---"
@@ -224,11 +225,11 @@ if no_only_filter || $ONLY_SHADOWS_ON; then
 fi
 
 # =========================================================================
-# Phase 2: Default layout + shadows OFF
+# ShadowToggle: Default layout with shadows OFF
 # =========================================================================
 
-if no_only_filter || $ONLY_SHADOWS_OFF; then
-    echo "=== Phase 2: Default layout + shadows OFF ==="
+if no_only_filter || $ONLY_SHADOW; then
+    echo "=== ShadowToggle: Default layout with shadows OFF ==="
     echo
 
     echo "--- SIF networks (no shadows) ---"
@@ -259,11 +260,11 @@ if no_only_filter || $ONLY_SHADOWS_OFF; then
 fi
 
 # =========================================================================
-# Phase 3: Link grouping variants (multi-relation networks only)
+# LinkGrouping: Link grouping variants (multi-relation networks only)
 # =========================================================================
 
 if no_only_filter || $ONLY_GROUPS; then
-    echo "=== Phase 3: Link grouping variants ==="
+    echo "=== LinkGrouping: Link grouping variants ==="
     echo
 
     # multi_relation.sif has relations: pp, pd, gi
@@ -307,11 +308,11 @@ if no_only_filter || $ONLY_GROUPS; then
 fi
 
 # =========================================================================
-# Phase 5: NodeSimilarity layout (resort + clustered)
+# NodeSimilarity: Similarity-based layout (resort + clustered)
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 5: NodeSimilarity layout ==="
+    echo "=== NodeSimilarity: Similarity-based layout ==="
     echo
 
     for mode in resort clustered; do
@@ -332,11 +333,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 6: HierDAG layout (DAG networks only, pointUp true/false)
+# HierDAG: Hierarchical DAG layout (DAG networks only, pointUp true/false)
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 6: HierDAG layout ==="
+    echo "=== HierDAG: Hierarchical DAG layout ==="
     echo
 
     for dag in dag_simple.sif dag_diamond.sif dag_deep.sif; do
@@ -358,11 +359,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 7: NodeCluster layout
+# NodeCluster: Cluster-based layout
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 7: NodeCluster layout ==="
+    echo "=== NodeCluster: Cluster-based layout ==="
     echo
 
     # multi_relation.sif + multi_relation_clusters.na
@@ -379,11 +380,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 8: ControlTop layout
+# ControlTop: Control-target layout
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 8: ControlTop layout ==="
+    echo "=== ControlTop: Control-target layout ==="
     echo
 
     # multi_relation: fixed list [A,B] as control nodes
@@ -405,7 +406,7 @@ if no_only_filter || $ONLY_LAYOUTS; then
         done
     fi
 
-    # --- ControlTop deep-variants: additional ctrl/target modes ---
+    # --- ControlTop advanced variants: additional ctrl/target modes ---
 
     if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
         TOTAL=$((TOTAL + 1))
@@ -441,7 +442,7 @@ if no_only_filter || $ONLY_LAYOUTS; then
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi
 
-    # --- NodeCluster deep-variants: ordering + placement modes ---
+    # --- NodeCluster advanced variants: ordering + placement modes ---
 
     if [ -z "$FILTER" ] || [ "$FILTER" = "multi_relation" ]; then
         TOTAL=$((TOTAL + 1))
@@ -472,7 +473,7 @@ if no_only_filter || $ONLY_LAYOUTS; then
         elif [ "$rc" -eq 2 ]; then FAIL=$((FAIL + 1)); fi
     fi
 
-    # --- NodeSimilarity deep-variants: custom parameters ---
+    # --- NodeSimilarity advanced variants: custom parameters ---
 
     if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
         TOTAL=$((TOTAL + 1))
@@ -504,11 +505,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 9: SetLayout (directed bipartite networks)
+# SetLayout: Directed bipartite networks (belongs_to/contains)
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 9: SetLayout ==="
+    echo "=== SetLayout: Directed bipartite networks ==="
     echo
 
     for lm in belongs_to contains; do
@@ -529,11 +530,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 10: WorldBank layout
+# WorldBank: Hub-spoke grouping layout
 # =========================================================================
 
 if no_only_filter || $ONLY_LAYOUTS; then
-    echo "=== Phase 10: WorldBank layout ==="
+    echo "=== WorldBank: Hub-spoke grouping layout ==="
     echo
 
     # (no WorldBank networks configured)
@@ -541,11 +542,11 @@ if no_only_filter || $ONLY_LAYOUTS; then
 fi
 
 # =========================================================================
-# Phase 11: Fixed-order import (NOA/EDA files)
+# FixedOrder: Fixed-order import (NOA/EDA files)
 # =========================================================================
 
 if no_only_filter || $ONLY_FIXED; then
-    echo "=== Phase 11: Fixed-order import ==="
+    echo "=== FixedOrder: Fixed-order import ==="
     echo
 
     # triangle + reversed NOA
@@ -584,11 +585,11 @@ if no_only_filter || $ONLY_FIXED; then
 fi
 
 # =========================================================================
-# Phase 12: Subnetwork extraction
+# SubnetworkExtraction: Extract subset of nodes
 # =========================================================================
 
-if no_only_filter || $ONLY_ANALYSIS; then
-    echo "=== Phase 12: Subnetwork extraction ==="
+if no_only_filter || $ONLY_SUBNETWORK; then
+    echo "=== SubnetworkExtraction: Extract subset of nodes ==="
     echo
 
     # Extract {A,B} from triangle
@@ -627,11 +628,11 @@ if no_only_filter || $ONLY_ANALYSIS; then
 fi
 
 # =========================================================================
-# Phase 13b: Graph analysis operations (connected components, topo sort, degree)
+# GraphAnalysis: Graph analysis operations (connected components, topo sort, degree)
 # =========================================================================
 
 if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
-    echo "=== Phase 13b: Graph analysis ==="
+    echo "=== GraphAnalysis: Graph analysis operations ==="
     echo
 
     # Connected components for various topologies
@@ -685,11 +686,11 @@ if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
 fi
 
 # =========================================================================
-# Phase 13: Display option permutations
+# DisplayOptions: Display option permutations (drain zones, color levels)
 # =========================================================================
 
 if no_only_filter || $ONLY_DISPLAY; then
-    echo "=== Phase 13: Display option permutations ==="
+    echo "=== DisplayOptions: Display option permutations ==="
     echo
 
     if [ -z "$FILTER" ] || [ "$FILTER" = "triangle" ]; then
@@ -771,11 +772,11 @@ if no_only_filter || $ONLY_DISPLAY; then
 fi
 
 # =========================================================================
-# Phase 14: Alignment tests
+# Alignment: Network alignment and comparison
 # =========================================================================
 
 if no_only_filter || $ONLY_ALIGN; then
-    echo "=== Phase 14: Alignment ==="
+    echo "=== Alignment: Network alignment and comparison ==="
     echo
 
     if [ -z "$FILTER" ] || [ "$FILTER" = "align" ]; then
@@ -992,11 +993,11 @@ if no_only_filter || $ONLY_ALIGN; then
 fi
 
 # =========================================================================
-# Phase 16b: BIF round-trip (populated annotations)
+# BIFRoundtrip: BIF serialization/deserialization (populated annotations)
 # =========================================================================
 
 if no_only_filter || $ONLY_ALIGN; then
-    echo "=== Phase 16b: BIF round-trip ==="
+    echo "=== BIFRoundtrip: BIF serialization/deserialization ==="
     echo
 
     # These BIF files from the publication contain populated nodeAnnotations,
@@ -1044,11 +1045,11 @@ if no_only_filter || $ONLY_ALIGN; then
 fi
 
 # =========================================================================
-# Phase 13c: Cycle & Jaccard analysis goldens (Rust-only)
+# CycleJaccard: Cycle detection & Jaccard similarity (Rust-only goldens)
 # =========================================================================
 
 if no_only_filter || $ONLY_GRAPH_ANALYSIS; then
-    echo "=== Phase 13c: Cycle & Jaccard analysis goldens ==="
+    echo "=== CycleJaccard: Cycle detection & Jaccard similarity ==="
     echo
 
     write_analysis_golden() {

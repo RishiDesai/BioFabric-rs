@@ -53,4 +53,4 @@ cargo test --test cli_tests
 
 ## License
 
-LGPL-2.1
+[Apache License 2.0](LICENSE)

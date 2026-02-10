@@ -21,8 +21,11 @@
 //!
 //! - Java: `org.systemsbiology.biofabric.layouts.SetLayout`
 
-use super::traits::{LayoutParams, LayoutResult, NodeLayout};
-use crate::model::{Network, NodeId};
+use super::build_data::LayoutBuildData;
+use super::default::DefaultEdgeLayout;
+use super::result::NetworkLayout;
+use super::traits::{EdgeLayout, LayoutMode, LayoutParams, LayoutResult, NodeLayout};
+use crate::model::{Annotation, AnnotationSet, Network, NodeId};
 use crate::worker::ProgressMonitor;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -223,6 +226,187 @@ impl SetLayout {
         });
 
         members.into_iter().map(|m| m.id).collect()
+    }
+
+    /// Run the complete set layout pipeline: node order, edge layout, and annotations.
+    ///
+    /// This is the full pipeline that:
+    /// 1. Computes the node order (sets first, then members)
+    /// 2. Marks all links as directed (set membership has inherent direction)
+    /// 3. Runs the default edge layout
+    /// 4. Builds node, link, and shadow link annotations
+    ///
+    /// ## References
+    ///
+    /// - Java: `SetLayout.doNodeLayout()` + subsequent annotation installation
+    pub fn full_layout(
+        &self,
+        network: &Network,
+        monitor: &dyn ProgressMonitor,
+    ) -> LayoutResult<NetworkLayout> {
+        let params = LayoutParams {
+            include_shadows: true,
+            layout_mode: LayoutMode::PerNode,
+            ..Default::default()
+        };
+
+        let node_order = self.layout_nodes(network, &params, monitor)?;
+
+        // Re-extract the set/member structure
+        let (elems_per_set, sets_per_elem) = self.extract_sets(network);
+
+        // The node_order is: sets first (ordered by cardinality desc, name asc), then members.
+        let set_nodes: BTreeSet<NodeId> = elems_per_set.keys().cloned().collect();
+        let member_order: Vec<NodeId> = node_order
+            .iter()
+            .filter(|n| !set_nodes.contains(n))
+            .cloned()
+            .collect();
+        let set_list: Vec<NodeId> = node_order
+            .iter()
+            .filter(|n| set_nodes.contains(n))
+            .cloned()
+            .collect();
+
+        // Java's SetLayout marks all links as directed. Clone the network
+        // and set directed=true.
+        let mut directed_network = network.clone();
+        for link in directed_network.links_mut() {
+            link.directed = Some(true);
+        }
+
+        let has_shadows = directed_network.has_shadows();
+        let mut build_data = LayoutBuildData::new(
+            directed_network,
+            node_order,
+            has_shadows,
+            params.layout_mode,
+        );
+
+        let edge_layout = DefaultEdgeLayout::new();
+        let mut layout = edge_layout.layout_edges(&mut build_data, &params, monitor)?;
+
+        // Java's SetLayout writes directed="true" for all links in the BIF.
+        for ll in layout.iter_links_mut() {
+            ll.directed = Some(true);
+        }
+
+        // --- Build annotations ---
+
+        // For non-shadow links: group by set → (min_col, max_col)
+        let mut set_col_ranges: HashMap<NodeId, (usize, usize)> = HashMap::new();
+        // For shadow links: group by member → (min_col, max_col)
+        let mut member_shadow_col_ranges: HashMap<NodeId, (usize, usize)> = HashMap::new();
+
+        for ll in layout.iter_links() {
+            if !ll.is_shadow {
+                let set_node = if set_nodes.contains(&ll.source) {
+                    &ll.source
+                } else if set_nodes.contains(&ll.target) {
+                    &ll.target
+                } else {
+                    continue;
+                };
+                let e = set_col_ranges
+                    .entry(set_node.clone())
+                    .or_insert((ll.column, ll.column));
+                e.0 = e.0.min(ll.column);
+                e.1 = e.1.max(ll.column);
+            } else {
+                let member_node = if sets_per_elem.contains_key(&ll.source) {
+                    &ll.source
+                } else if sets_per_elem.contains_key(&ll.target) {
+                    &ll.target
+                } else {
+                    continue;
+                };
+                let e = member_shadow_col_ranges
+                    .entry(member_node.clone())
+                    .or_insert((ll.column, ll.column));
+                e.0 = e.0.min(ll.column);
+                e.1 = e.1.max(ll.column);
+            }
+        }
+
+        // Node annotations: each member gets annotated with "&"-joined set names
+        let mut node_annots = AnnotationSet::new();
+        for member in &member_order {
+            if let Some(member_sets) = sets_per_elem.get(member) {
+                let tag: Vec<String> = set_list
+                    .iter()
+                    .filter(|s| member_sets.contains(*s))
+                    .map(|s| s.as_str().to_string())
+                    .collect();
+                if !tag.is_empty() {
+                    let row = layout.get_node(member).map(|nl| nl.row).unwrap_or(0);
+                    node_annots.add(Annotation::new(tag.join("&"), row, row, 0, ""));
+                }
+            }
+        }
+        layout.node_annotations = node_annots;
+
+        // Link annotations (non-shadow): grouped by set in set_list order
+        let mut link_annots = AnnotationSet::new();
+        for set_node in &set_list {
+            if set_col_ranges.contains_key(set_node) {
+                let mut ns_start = usize::MAX;
+                let mut ns_end = 0;
+                for ll in layout.iter_links() {
+                    if !ll.is_shadow {
+                        let sn = if set_nodes.contains(&ll.source) {
+                            &ll.source
+                        } else if set_nodes.contains(&ll.target) {
+                            &ll.target
+                        } else {
+                            continue;
+                        };
+                        if sn == set_node {
+                            if let Some(ns_col) = ll.column_no_shadows {
+                                ns_start = ns_start.min(ns_col);
+                                ns_end = ns_end.max(ns_col);
+                            }
+                        }
+                    }
+                }
+                if ns_start != usize::MAX {
+                    link_annots.add(Annotation::new(
+                        set_node.as_str(),
+                        ns_start,
+                        ns_end,
+                        0,
+                        "",
+                    ));
+                }
+            }
+        }
+        layout.link_annotations_no_shadows = link_annots;
+
+        // Shadow link annotations: set groups (non-shadow columns) + member groups (shadow columns)
+        let mut shadow_annots = AnnotationSet::new();
+        // First, set groups (using shadow column ranges for non-shadow links)
+        for set_node in &set_list {
+            if let Some(&(start, end)) = set_col_ranges.get(set_node) {
+                shadow_annots.add(Annotation::new(set_node.as_str(), start, end, 0, ""));
+            }
+        }
+        // Then, member groups (shadow columns) with "&"-joined set tag
+        for member in &member_order {
+            if let Some(&(start, end)) = member_shadow_col_ranges.get(member) {
+                if let Some(member_sets) = sets_per_elem.get(member) {
+                    let tag: Vec<String> = set_list
+                        .iter()
+                        .filter(|s| member_sets.contains(*s))
+                        .map(|s| s.as_str().to_string())
+                        .collect();
+                    if !tag.is_empty() {
+                        shadow_annots.add(Annotation::new(tag.join("&"), start, end, 0, ""));
+                    }
+                }
+            }
+        }
+        layout.link_annotations = shadow_annots;
+
+        Ok(layout)
     }
 }
 
