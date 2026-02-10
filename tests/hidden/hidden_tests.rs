@@ -15,7 +15,8 @@
 //
 // == Golden Generation ==
 //
-//   cargo test --test hidden_tests generate_goldens -- --ignored --nocapture
+//   ./tests/hidden/generate_goldens.sh   (Docker, from repo root)
+//   ./tests/hidden/generate_goldens_inline.sh  (inside Docker build)
 //
 // == Running ==
 //
@@ -100,7 +101,7 @@ fn golden_available(dirname: &str, filename: &str) -> bool {
     assert!(
         path.exists(),
         "Hidden golden file not found at {}. \
-         Run: cargo test --test hidden_tests generate_goldens -- --ignored --nocapture",
+         Run: ./tests/hidden/generate_goldens.sh",
         path.display()
     );
     true
