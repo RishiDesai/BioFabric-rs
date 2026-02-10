@@ -31,4 +31,3 @@ png_export = ["image"]
 [lib]
 name = "biofabric_core"
 path = "src/lib.rs"
-

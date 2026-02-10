@@ -10,7 +10,7 @@
 //
 // == Running ==
 //
-//   cargo test --test parity_tests                      # skips if goldens missing
+//   cargo test --test parity_tests                      # fails if goldens missing
 //   cargo test --test parity_tests -- --include-ignored # run all
 //   cargo test --test parity_tests -- --nocapture       # with output
 //   cargo test --test parity_tests sif_triangle         # run one test group
@@ -68,16 +68,15 @@ fn golden_dir(dirname: &str) -> PathBuf {
     parity_root().join("goldens").join(dirname)
 }
 
-/// Check if a specific golden file exists. Returns false (and prints a
-/// message) if it hasn't been generated yet.
-fn golden_available(dirname: &str, filename: &str) -> bool {
+/// Check if a specific golden file exists. Panics with a helpful message
+/// if the file is missing, preventing tests from silently passing.
+fn golden_available(dirname: &str, filename: &str) {
     let path = golden_dir(dirname).join(filename);
     assert!(
         path.exists(),
         "Golden file not found at {}. Run ./tests/parity/generate_goldens.sh first.",
         path.display()
     );
-    true
 }
 
 /// Read a golden file and return its contents as a string.
@@ -718,16 +717,6 @@ fn run_control_top_layout(
 
     let edge_layout = DefaultEdgeLayout::new();
     edge_layout.layout_edges(&mut build_data, &params, &monitor).unwrap()
-}
-
-/// Run the NodeCluster layout.
-fn run_node_cluster_layout(network: &Network, attribute_file: &str) -> NetworkLayout {
-    run_node_cluster_layout_with_params(
-        network,
-        attribute_file,
-        ClusterOrder::Name,
-        InterClusterPlacement::Between,
-    )
 }
 
 /// Run the NodeCluster layout with explicit ordering and placement modes.
@@ -1560,27 +1549,6 @@ fn format_eda(layout: &NetworkLayout) -> String {
     out
 }
 
-/// Format a NetworkLayout as EDA string (shadows OFF).
-///
-/// Only includes non-shadow links and uses column_no_shadows values.
-fn format_eda_no_shadows(layout: &NetworkLayout) -> String {
-    let mut out = String::new();
-    out.push_str("Link Column\n");
-
-    for ll in layout.iter_links() {
-        if ll.is_shadow {
-            continue;
-        }
-        let col = ll.column_no_shadows.unwrap_or(ll.column);
-        out.push_str(&format!(
-            "{} ({}) {} = {}\n",
-            ll.source, ll.relation, ll.target, col
-        ));
-    }
-
-    out
-}
-
 fn parse_bool_from_text(text: &str) -> Option<bool> {
     for token in text
         .split(|c: char| !c.is_ascii_alphabetic())
@@ -1717,9 +1685,7 @@ fn run_analysis_test(cfg: &ParityConfig) {
 /// - `link_groups`: node order is unchanged (groups only affect EDA)
 #[allow(dead_code)]
 fn run_noa_test(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.noa") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.noa");
 
     let input = if cfg.is_roundtrip {
         golden_dir(cfg.golden_dirname).join("output.bif")
@@ -1814,9 +1780,7 @@ fn run_noa_test(cfg: &ParityConfig) {
 /// - `link_groups` + `group_mode`: group edges by relation type
 #[allow(dead_code)]
 fn run_eda_test(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.eda") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.eda");
 
     let input = if cfg.is_roundtrip {
         golden_dir(cfg.golden_dirname).join("output.bif")
@@ -2057,9 +2021,7 @@ fn produce_bif_string(cfg: &ParityConfig) -> String {
 /// Run a BIF (session XML) parity test — exact byte-for-byte comparison.
 #[allow(dead_code)]
 fn run_bif_test(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.bif") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.bif");
     let golden_bif = read_golden(cfg.golden_dirname, "output.bif");
     let actual_bif = produce_bif_string(cfg);
     assert_parity("BIF", &golden_bif, &actual_bif);
@@ -2068,9 +2030,7 @@ fn run_bif_test(cfg: &ParityConfig) {
 /// Same as run_bif_test but strips nid="..." attributes before comparing.
 #[allow(dead_code)]
 fn run_bif_test_nid_normalized(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.bif") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.bif");
     let golden_bif = read_golden(cfg.golden_dirname, "output.bif");
     let actual_bif = produce_bif_string(cfg);
     assert_parity_bif_nid_normalized("BIF", &golden_bif, &actual_bif);
@@ -2080,9 +2040,7 @@ fn run_bif_test_nid_normalized(cfg: &ParityConfig) {
 /// Only used for alignment tests (cycle layout) where HashSet ordering varies.
 #[allow(dead_code)]
 fn run_noa_test_unordered(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.noa") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.noa");
     let golden_noa = read_golden(cfg.golden_dirname, "output.noa");
 
     let input = network_path(cfg.input_file);
@@ -2109,9 +2067,7 @@ fn run_noa_test_unordered(cfg: &ParityConfig) {
 /// Only used for alignment tests (cycle layout) where HashSet ordering varies.
 #[allow(dead_code)]
 fn run_eda_test_unordered(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.eda") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.eda");
     let golden_eda = read_golden(cfg.golden_dirname, "output.eda");
 
     let input = network_path(cfg.input_file);
@@ -2137,9 +2093,7 @@ fn run_eda_test_unordered(cfg: &ParityConfig) {
 /// Run BIF test with NID normalization and unordered node/link sections.
 #[allow(dead_code)]
 fn run_bif_test_unordered(cfg: &ParityConfig) {
-    if !golden_available(cfg.golden_dirname, "output.bif") {
-        return;
-    }
+    golden_available(cfg.golden_dirname, "output.bif");
     let golden_bif = read_golden(cfg.golden_dirname, "output.bif");
     let actual_bif = produce_bif_string(cfg);
     let expected_norm = normalize_bif_nids(&golden_bif);
@@ -3164,599 +3118,6 @@ macro_rules! parity_test_align {
             }
         }
     };
-}
-
-// ===========================================================================
-// Golden file generation helper (run with --include-ignored)
-// ===========================================================================
-
-/// Generate golden files for all P1 and P2 parity tests.
-///
-/// Golden files are gitignored (too large for the repo). This helper
-/// regenerates them from the Rust implementation. Run once before the
-/// parity tests:
-///
-///   cargo test --test parity_tests generate_goldens -- --include-ignored --nocapture
-///
-/// The generate_goldens.sh script (Docker/Java) is the canonical source,
-/// but this Rust-based generator produces identical output and is much
-/// faster.
-#[test]
-#[ignore = "golden-gen: run explicitly to generate golden files"]
-fn generate_goldens() {
-    let cases: Vec<(&str, &str, bool)> = vec![
-        // ---- P1: Default layout, shadows ON (12 networks) ----
-        ("single_node.sif",               "single_node_default",               true),
-        ("single_edge.sif",               "single_edge_default",               true),
-        ("triangle.sif",                  "triangle_default",                  true),
-        ("self_loop.sif",                 "self_loop_default",                 true),
-        ("isolated_nodes.sif",            "isolated_nodes_default",            true),
-        ("disconnected_components.sif",   "disconnected_components_default",   true),
-        ("multi_relation.sif",            "multi_relation_default",            true),
-        ("dense_clique.sif",              "dense_clique_default",              true),
-        ("linear_chain.sif",              "linear_chain_default",              true),
-        ("triangle.gw",                   "triangle_gw_default",               true),
-        ("directed_triangle.gw",          "directed_triangle_gw_default",      true),
-        // ---- P2: Default layout, shadows OFF (12 networks) ----
-        ("single_node.sif",               "single_node_noshadow",              false),
-        ("single_edge.sif",               "single_edge_noshadow",              false),
-        ("triangle.sif",                  "triangle_noshadow",                 false),
-        ("self_loop.sif",                 "self_loop_noshadow",                false),
-        ("isolated_nodes.sif",            "isolated_nodes_noshadow",           false),
-        ("disconnected_components.sif",   "disconnected_components_noshadow",  false),
-        ("multi_relation.sif",            "multi_relation_noshadow",           false),
-        ("dense_clique.sif",              "dense_clique_noshadow",             false),
-        ("linear_chain.sif",              "linear_chain_noshadow",             false),
-        ("triangle.gw",                   "triangle_gw_noshadow",              false),
-        ("directed_triangle.gw",          "directed_triangle_gw_noshadow",     false),
-    ];
-
-    let mut generated = 0;
-    let mut skipped = 0;
-
-    for (input_file, golden_dirname, shadows) in &cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        // Skip if already generated (avoids redundant work on re-runs)
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden: {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let layout = run_default_layout(&network);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = if *shadows {
-            format_eda(&layout)
-        } else {
-            format_eda_no_shadows(&layout)
-        };
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P3: Link grouping (4 variants) ----
-    let group_cases: Vec<(&str, &str, &[&str], &str)> = vec![
-        ("multi_relation.sif",      "multi_relation_pernode",              &["pp", "pd", "gi"],              "per_node"),
-        ("multi_relation.sif",      "multi_relation_pernetwork",           &["pp", "pd", "gi"],              "per_network"),
-        ("directed_triangle.gw",    "directed_triangle_gw_pernode",        &["activates", "inhibits"],       "per_node"),
-        ("directed_triangle.gw",    "directed_triangle_gw_pernetwork",     &["activates", "inhibits"],       "per_network"),
-    ];
-
-    for (input_file, golden_dirname, groups, mode_str) in &group_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (groups): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let mode = match *mode_str {
-            "per_node" => LayoutMode::PerNode,
-            "per_network" => LayoutMode::PerNetwork,
-            _ => LayoutMode::PerNode,
-        };
-        let group_strings: Vec<String> = groups.iter().map(|s| s.to_string()).collect();
-        let layout = run_layout_with_groups(&network, &group_strings, mode);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P8: ControlTop layout ----
-    let controltop_cases: Vec<(&str, &str, &str, &str, Option<&[&str]>)> = vec![
-        ("multi_relation.sif", "multi_relation_controltop_degree_only_target_degree",  "degree_only", "target_degree", None),
-        ("multi_relation.sif", "multi_relation_controltop_degree_only_breadth_order",  "degree_only", "breadth_order", None),
-        // Deep-variant modes
-        ("triangle.sif", "triangle_controltop_intra_degree_target_degree",            "intra_degree",         "target_degree",   None),
-        ("triangle.sif", "triangle_controltop_median_target_degree_target_degree",    "median_target_degree", "target_degree",   None),
-        ("triangle.sif", "triangle_controltop_degree_only_gray_code",                "degree_only",          "gray_code",       None),
-        ("triangle.sif", "triangle_controltop_degree_only_degree_odometer",          "degree_only",          "degree_odometer", None),
-    ];
-
-    for (input_file, golden_dirname, ctrl_mode_str, targ_mode_str, ctrl_nodes) in &controltop_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (controltop): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let ctrl_mode = parse_control_order(Some(ctrl_mode_str));
-        let targ_mode = parse_target_order(Some(targ_mode_str));
-        let layout = run_control_top_layout(&network, ctrl_mode, targ_mode, *ctrl_nodes);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P7: NodeCluster layout ----
-    {
-        let input_file = "multi_relation.sif";
-        let golden_dirname = "multi_relation_node_cluster";
-        let attribute_file = "multi_relation_clusters.na";
-
-        let input_path = network_path(input_file);
-        if input_path.exists() {
-            let golden_path = golden_dir(golden_dirname);
-            let noa_path = golden_path.join("output.noa");
-            if !noa_path.exists() {
-                eprintln!("Generating golden (cluster): {} -> {}", input_file, golden_dirname);
-                let network = load_network(&input_path);
-                let layout = run_node_cluster_layout(&network, attribute_file);
-
-                let noa_content = format_noa(&layout);
-                let eda_content = format_eda(&layout);
-
-                std::fs::create_dir_all(&golden_path).unwrap();
-                std::fs::write(&noa_path, &noa_content).unwrap();
-                std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-                eprintln!(
-                    "  {} : {} NOA lines, {} EDA lines",
-                    golden_dirname,
-                    noa_content.lines().count(),
-                    eda_content.lines().count()
-                );
-                generated += 1;
-            } else {
-                skipped += 1;
-            }
-        } else {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-        }
-    }
-
-    // ---- P11: Fixed node-order import (2 variants) ----
-    let fixed_noa_cases: Vec<(&str, &str, &str)> = vec![
-        ("triangle.sif",        "triangle_fixed_noa",        "triangle_reversed.noa"),
-        ("multi_relation.sif",  "multi_relation_fixed_noa",  "multi_relation_shuffled.noa"),
-    ];
-
-    for (input_file, golden_dirname, noa_filename) in &fixed_noa_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let noa_input = noa_file_path(noa_filename);
-        if !noa_input.exists() {
-            eprintln!("SKIP: NOA file not found: {}", noa_input.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (fixed NOA): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let node_order = parse_noa_format_file(&noa_input);
-        let layout = run_layout_with_node_order(&network, node_order);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P5: Similarity layout (resort + clustered, 4 variants) ----
-    let similarity_cases: Vec<(&str, &str, &str, SimilarityMode)> = vec![
-        // Resort mode
-        ("triangle.sif",       "triangle_similarity_resort",       "sif", SimilarityMode::Resort),
-        ("multi_relation.sif", "multi_relation_similarity_resort",  "sif", SimilarityMode::Resort),
-        // Clustered mode
-        ("triangle.sif",       "triangle_similarity_clustered",       "sif", SimilarityMode::Clustered),
-        ("multi_relation.sif", "multi_relation_similarity_clustered",  "sif", SimilarityMode::Clustered),
-    ];
-
-    for (input_file, golden_dirname, _ext, mode) in &similarity_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (similarity): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let layout = run_similarity_layout(&network, *mode);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P12: Subnetwork extraction (3 variants) ----
-    let extract_cases: Vec<(&str, &str, &[&str])> = vec![
-        ("triangle.sif",        "triangle_extract_AB",          &["A", "B"]),
-        ("multi_relation.sif",  "multi_relation_extract_ACE",   &["A", "C", "E"]),
-        ("dense_clique.sif",    "dense_clique_extract_ABC",     &["A", "B", "C"]),
-    ];
-
-    for (input_file, golden_dirname, extract_nodes) in &extract_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (extract): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let sub_network = extract_subnetwork(&network, extract_nodes);
-        let layout = run_default_layout(&sub_network);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P6: HierDAG layout (3 DAGs × 2 pointUp) ----
-    let hierdag_cases: Vec<(&str, &str, bool)> = vec![
-        ("dag_simple.sif",   "dag_simple_hierdag_true",   true),
-        ("dag_simple.sif",   "dag_simple_hierdag_false",  false),
-        ("dag_diamond.sif",  "dag_diamond_hierdag_true",  true),
-        ("dag_diamond.sif",  "dag_diamond_hierdag_false", false),
-        ("dag_deep.sif",     "dag_deep_hierdag_true",     true),
-        ("dag_deep.sif",     "dag_deep_hierdag_false",    false),
-    ];
-
-    for (input_file, golden_dirname, point_up) in &hierdag_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (HierDAG): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let mut params = LayoutParams {
-            include_shadows: true,
-            layout_mode: LayoutMode::PerNode,
-            ..Default::default()
-        };
-        params.point_up = Some(*point_up);
-        let layout = run_hierdag_layout(&network, &params);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- P10: WorldBank layout (0 networks) ----
-    let world_bank_cases: Vec<(&str, &str)> = vec![];
-
-    for (input_file, golden_dirname) in &world_bank_cases {
-        let input_path = network_path(input_file);
-        if !input_path.exists() {
-            eprintln!("SKIP: input file not found: {}", input_path.display());
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (WorldBank): {} -> {}", input_file, golden_dirname);
-
-        let network = load_network(&input_path);
-        let layout = run_world_bank_layout(&network);
-
-        let noa_content = format_noa(&layout);
-        let eda_content = format_eda(&layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    // ---- Alignment layout goldens ----
-    let align_cases: Vec<(&str, &str, &str, &str, &str)> = vec![
-        // (g1_file, g2_file, align_file, golden_dirname, mode_hint)
-        ("align_net1.sif", "align_net2.sif", "test_perfect.align", "align_perfect", "group"),
-        ("align_net1.sif", "align_net2.sif", "test_partial.align", "align_partial", "group"),
-        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure", "group"),
-        // Orphan variants
-        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_orphan", "orphan"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_orphan", "orphan"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_orphan", "orphan"),
-        // NG variants (same as group but with NG mode)
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_nc", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_s3_pure.align", "align_yeast_sc_s3_pure_ng_nc", "group"),
-        ("Yeast2KReduced.sif", "SC.sif", "yeast_sc_perfect.align", "align_yeast_sc_perfect_ng_jacc", "group"),
-        ("CaseStudy-IV-SmallYeast.gw", "CaseStudy-IV-LargeYeast.gw", "casestudy_iv.align", "align_casestudy_iv_ng_nc", "group"),
-    ];
-
-    for (g1_file, g2_file, align_file_name, golden_dirname, mode_hint) in &align_cases {
-        let g1_path = network_path(g1_file);
-        let g2_path = network_path(g2_file);
-        let align_path = parity_root().join("networks").join("align").join(align_file_name);
-
-        if !g1_path.exists() || !g2_path.exists() || !align_path.exists() {
-            eprintln!("SKIP: alignment input not found for {}", golden_dirname);
-            skipped += 1;
-            continue;
-        }
-
-        let golden_path = golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            skipped += 1;
-            continue;
-        }
-
-        eprintln!("Generating golden (alignment): {} -> {}", align_file_name, golden_dirname);
-
-        let g1 = load_network(&g1_path);
-        let g2 = load_network(&g2_path);
-
-        let mode = match *mode_hint {
-            "orphan" => AlignmentLayoutMode::Orphan,
-            "cycle" => AlignmentLayoutMode::Cycle,
-            _ => AlignmentLayoutMode::Group,
-        };
-
-        let mut cfg = default_config(g1_file, golden_dirname);
-        cfg.layout = "alignment";
-        cfg.align_net2 = Some(g2_file);
-        cfg.align_file = Some(align_file_name);
-
-        let aligned = run_alignment_layout(&cfg, &g1, &g2, align_file_name, mode);
-
-        let noa_content = format_noa(&aligned.layout);
-        let eda_content = format_eda(&aligned.layout);
-
-        std::fs::create_dir_all(&golden_path).unwrap();
-        std::fs::write(&noa_path, &noa_content).unwrap();
-        std::fs::write(golden_path.join("output.eda"), &eda_content).unwrap();
-
-        // Also generate scores file for scoring tests
-        {
-            let monitor = NoopMonitor;
-            let alignment = biofabric_core::io::align::parse_file(&align_path).unwrap();
-            let merged = MergedNetwork::from_alignment(&g1, &g2, &alignment, None, &monitor).unwrap();
-            let scores = biofabric_core::alignment::scoring::AlignmentScores::topological(&merged, &monitor);
-
-            let mut scores_content = String::new();
-            scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", scores.ec));
-            scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", scores.s3));
-            scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", scores.ics));
-
-            // If we can compute evaluation metrics, add them too
-            // For now, try to find a perfect alignment
-            let perfect_align_name = if *golden_dirname == "align_casestudy_iv" {
-                Some(*align_file_name)
-            } else if golden_dirname.starts_with("align_yeast_sc_") {
-                Some("yeast_sc_perfect.align")
-            } else if *golden_dirname == "align_perfect" || *golden_dirname == "align_partial" {
-                Some("test_perfect.align")
-            } else {
-                None
-            };
-
-            if let Some(perf_name) = perfect_align_name {
-                let perf_path = parity_root().join("networks").join("align").join(perf_name);
-                if perf_path.exists() {
-                    let perfect = biofabric_core::io::align::parse_file(&perf_path).unwrap();
-                    let merged_with_perf = MergedNetwork::from_alignment(&g1, &g2, &alignment, Some(&perfect), &monitor).unwrap();
-                    let perfect_merged = MergedNetwork::from_alignment(&g1, &g2, &perfect, Some(&perfect), &monitor).unwrap();
-                    let full_scores = biofabric_core::alignment::scoring::AlignmentScores::with_full_evaluation(
-                        &merged_with_perf,
-                        &perfect_merged,
-                        &g1,
-                        &g2,
-                        &alignment,
-                        &perfect,
-                        &monitor,
-                    );
-
-                    scores_content.clear();
-                    scores_content.push_str(&format!("networkAlignment.edgeCoverage\t{:.10}\n", full_scores.ec));
-                    scores_content.push_str(&format!("networkAlignment.symmetricSubstructureScore\t{:.10}\n", full_scores.s3));
-                    scores_content.push_str(&format!("networkAlignment.inducedConservedStructure\t{:.10}\n", full_scores.ics));
-                    if let Some(nc) = full_scores.nc {
-                        scores_content.push_str(&format!("networkAlignment.nodeCorrectness\t{:.10}\n", nc));
-                    }
-                    if let Some(ngs) = full_scores.ngs {
-                        scores_content.push_str(&format!("networkAlignment.nodeGroupSimilarity\t{:.10}\n", ngs));
-                    }
-                    if let Some(lgs) = full_scores.lgs {
-                        scores_content.push_str(&format!("networkAlignment.linkGroupSimilarity\t{:.10}\n", lgs));
-                    }
-                    if let Some(js) = full_scores.js {
-                        scores_content.push_str(&format!("networkAlignment.jaccardSimilarity\t{:.10}\n", js));
-                    }
-                }
-            }
-
-            std::fs::write(golden_path.join("output.scores"), &scores_content).unwrap();
-        }
-
-        eprintln!(
-            "  {} : {} NOA lines, {} EDA lines",
-            golden_dirname,
-            noa_content.lines().count(),
-            eda_content.lines().count()
-        );
-        generated += 1;
-    }
-
-    eprintln!("\nGolden generation complete: {} generated, {} skipped (already exist or input missing)", generated, skipped);
 }
 
 // ===========================================================================

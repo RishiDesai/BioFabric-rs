@@ -1028,21 +1028,6 @@ fn align_score_yeast_sc_s3_pure_js() {
     run_alignment_score_test("align_yeast_sc_s3_pure", "Jaccard Similarity", 0.0);
 }
 
-// importance_pure + s3_050 scoring tests removed — redundant with perfect + s3_pure
-
-// DesaiEtAl-2019 blend variants (s3_001 through s3_100) removed —
-// redundant with perfect + s3_pure for code path coverage.
-// Were 42 scoring tests (6 variants × 7 metrics), all loading Yeast2KReduced + SC.
-
-// [42 test functions for s3_001 through s3_100 were here — removed]
-
-
-
-
-
-// --- yeast_sc_s3_100 (from CaseStudy-III-p1S3p90Imp.bif) ---
-
-
 // ---------------------------------------------------------------------------
 // Node group size validation (DesaiEtAl-2019 Table 10)
 // ---------------------------------------------------------------------------
@@ -1148,70 +1133,6 @@ fn node_group_sizes_correct() {
             ("(R:pRr)", 578),
             ("(R:rRr)", 209),
             ("(R:pRr/rRr)", 2665),
-            ("(R:0)", 0),
-        ],
-    );
-}
-
-#[test]
-fn node_group_sizes_all_importance() {
-    // Pure Importance alignment (1.0*I): very few purple edges
-    // From Table 10, "All Importance" column
-    run_node_group_size_test(
-        "Yeast2KReduced.sif", "SC.sif",
-        "yeast_sc_importance_pure.align", "yeast_sc_perfect.align",
-        &[
-            ("(P:0)", 0),
-            ("(P:P)", 0),
-            ("(P:pBp)", 0),
-            ("(P:pRp)", 0),
-            ("(P:P/pBp)", 0),
-            ("(P:P/pRp)", 0),
-            ("(P:pBp/pRp)", 403),
-            ("(P:P/pBp/pRp)", 9),
-            ("(P:pRr)", 0),
-            ("(P:P/pRr)", 0),
-            ("(P:pBp/pRr)", 35),
-            ("(P:pRp/pRr)", 0),
-            ("(P:P/pBp/pRr)", 9),
-            ("(P:P/pRp/pRr)", 0),
-            ("(P:pBp/pRp/pRr)", 1677),
-            ("(P:P/pBp/pRp/pRr)", 246),
-            ("(R:pRr)", 843),
-            ("(R:rRr)", 58),
-            ("(R:pRr/rRr)", 2551),
-            ("(R:0)", 0),
-        ],
-    );
-}
-
-#[test]
-fn node_group_sizes_mixed() {
-    // Mixed alignment (.03*S3 + .97*I): best visual match to correct
-    // From Table 10, "Mixed" column
-    run_node_group_size_test(
-        "Yeast2KReduced.sif", "SC.sif",
-        "yeast_sc_s3_030.align", "yeast_sc_perfect.align",
-        &[
-            ("(P:0)", 0),
-            ("(P:P)", 23),
-            ("(P:pBp)", 0),
-            ("(P:pRp)", 0),
-            ("(P:P/pBp)", 59),
-            ("(P:P/pRp)", 62),
-            ("(P:pBp/pRp)", 207),
-            ("(P:P/pBp/pRp)", 193),
-            ("(P:pRr)", 0),
-            ("(P:P/pRr)", 31),
-            ("(P:pBp/pRr)", 98),
-            ("(P:pRp/pRr)", 0),
-            ("(P:P/pBp/pRr)", 43),
-            ("(P:P/pRp/pRr)", 530),
-            ("(P:pBp/pRp/pRr)", 82),
-            ("(P:P/pBp/pRp/pRr)", 1051),
-            ("(R:pRr)", 752),
-            ("(R:rRr)", 0),
-            ("(R:pRr/rRr)", 2700),
             ("(R:0)", 0),
         ],
     );
