@@ -15,7 +15,8 @@
 //
 // == Golden Generation ==
 //
-//   cargo test --test hidden_tests generate_goldens -- --ignored --nocapture
+//   ./tests/hidden/generate_goldens.sh   (Docker, from repo root)
+//   ./tests/hidden/generate_goldens_inline.sh  (inside Docker build)
 //
 // == Running ==
 //
@@ -100,7 +101,7 @@ fn golden_available(dirname: &str, filename: &str) -> bool {
     assert!(
         path.exists(),
         "Hidden golden file not found at {}. \
-         Run: cargo test --test hidden_tests generate_goldens -- --ignored --nocapture",
+         Run: ./tests/hidden/generate_goldens.sh",
         path.display()
     );
     true
@@ -584,198 +585,6 @@ fn format_scores(
     }
 
     out
-}
-
-// ===========================================================================
-//
-//  GOLDEN GENERATION
-//
-//  Generates reference outputs using the working Rust implementation.
-//
-// ===========================================================================
-
-#[test]
-#[ignore = "Run manually to generate hidden goldens"]
-fn generate_goldens() {
-    let mut generated = 0usize;
-    let mut skipped = 0usize;
-
-    // ---- H1: MMusculus default layout ----
-    {
-        let golden_dirname = "hidden_mmus_default";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let network = load_network(&hidden_network_path("MMusculus.gw"));
-            let layout = run_default_layout(&network);
-            let noa = format_noa(&layout);
-            let eda = format_eda(&layout);
-            let bif = produce_bif_default(&network, &layout);
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    // ---- H2: AThaliana default layout ----
-    {
-        let golden_dirname = "hidden_atha_default";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let network = load_network(&hidden_network_path("AThaliana.gw"));
-            let layout = run_default_layout(&network);
-            let noa = format_noa(&layout);
-            let eda = format_eda(&layout);
-            let bif = produce_bif_default(&network, &layout);
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    // ---- H3: MMusculus no-shadow layout ----
-    {
-        let golden_dirname = "hidden_mmus_noshadow";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let network = load_network(&hidden_network_path("MMusculus.gw"));
-            let layout = run_default_layout_no_shadows(&network);
-            let noa = format_noa(&layout);
-            let eda = format_eda_no_shadows(&layout);
-            let bif = produce_bif_no_shadows(&network, &layout);
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    // ---- H4: MMusculus ↔ AThaliana alignment ----
-    {
-        let golden_dirname = "hidden_align_mmus_atha";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let g1 = load_network(&hidden_network_path("MMusculus.gw"));
-            let g2 = load_network(&hidden_network_path("AThaliana.gw"));
-            let align_path = hidden_align_path("MMusculus-AThaliana.align");
-
-            let aligned = run_alignment_layout(
-                &g1, &g2, &align_path, None,
-                AlignmentLayoutMode::Group, golden_dirname,
-            );
-            let noa = format_noa(&aligned.layout);
-            let eda = format_eda(&aligned.layout);
-            let bif = produce_bif_default(&aligned.network, &aligned.layout);
-            let scores = format_scores(&g1, &g2, &align_path, None);
-
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            std::fs::write(golden_path.join("output.scores"), &scores).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    // ---- H5: Yeast2KReduced ↔ SC with S3=0.005/importance=0.995 ----
-    {
-        let golden_dirname = "hidden_align_yeast_sc_s3_005";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let g1 = load_network(&parity_network_path("Yeast2KReduced.sif"));
-            let g2 = load_network(&parity_network_path("SC.sif"));
-            let align_path = hidden_align_path(
-                "CaseStudy-III-y2kr-SC-s3-0.005-importance-0.995.0.align",
-            );
-            let perfect_path = parity_align_path("yeast_sc_perfect.align");
-
-            let aligned = run_alignment_layout(
-                &g1, &g2, &align_path, Some(&perfect_path),
-                AlignmentLayoutMode::Group, golden_dirname,
-            );
-            let noa = format_noa(&aligned.layout);
-            let eda = format_eda(&aligned.layout);
-            let bif = produce_bif_default(&aligned.network, &aligned.layout);
-            let scores = format_scores(&g1, &g2, &align_path, Some(&perfect_path));
-
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            std::fs::write(golden_path.join("output.scores"), &scores).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    // ---- H6: MMusculus ↔ AThaliana orphan view ----
-    {
-        let golden_dirname = "hidden_align_mmus_atha_orphan";
-        let golden_path = hidden_golden_dir(golden_dirname);
-        let noa_path = golden_path.join("output.noa");
-        if noa_path.exists() {
-            eprintln!("SKIP (exists): {}", golden_dirname);
-            skipped += 1;
-        } else {
-            eprintln!("Generating: {}", golden_dirname);
-            let g1 = load_network(&hidden_network_path("MMusculus.gw"));
-            let g2 = load_network(&hidden_network_path("AThaliana.gw"));
-            let align_path = hidden_align_path("MMusculus-AThaliana.align");
-
-            let aligned = run_alignment_layout(
-                &g1, &g2, &align_path, None,
-                AlignmentLayoutMode::Orphan, golden_dirname,
-            );
-            let noa = format_noa(&aligned.layout);
-            let eda = format_eda(&aligned.layout);
-            let bif = produce_bif_default(&aligned.network, &aligned.layout);
-
-            std::fs::create_dir_all(&golden_path).unwrap();
-            std::fs::write(&noa_path, &noa).unwrap();
-            std::fs::write(golden_path.join("output.eda"), &eda).unwrap();
-            std::fs::write(golden_path.join("output.bif"), &bif).unwrap();
-            eprintln!("  {} : {} NOA lines, {} EDA lines", golden_dirname, noa.lines().count(), eda.lines().count());
-            generated += 1;
-        }
-    }
-
-    eprintln!(
-        "\nHidden golden generation complete: {} generated, {} skipped",
-        generated, skipped
-    );
 }
 
 // ===========================================================================
