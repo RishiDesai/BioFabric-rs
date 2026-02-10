@@ -5,21 +5,8 @@
 // byte-level parity for node order (.noa), link order (.eda), and session
 // XML (.bif) files.
 //
-// == Test Structure ==
-//
-// Each test case is split into *three* independent test functions — one per
-// output format (NOA, EDA, BIF). This allows agents to make incremental
-// progress: first get the parser right (NOA passes), then the edge layout
-// (EDA passes), then the full XML export (BIF passes).
-//
-// == Setup ==
-//
-// Before running these tests, golden files must be generated:
-//
-//   ./tests/parity/generate_goldens.sh
-//
-// This builds BioFabric in a Docker container and produces reference outputs
-// under tests/parity/goldens/.
+// Each test case is split into independent test functions per output format
+// so progress can be tracked incrementally.
 //
 // == Running ==
 //
