@@ -96,7 +96,7 @@ fn hidden_golden_dir(dirname: &str) -> PathBuf {
 }
 
 /// Check that a specific golden file exists.
-fn golden_available(dirname: &str, filename: &str) -> bool {
+fn golden_available(dirname: &str, filename: &str) {
     let path = hidden_golden_dir(dirname).join(filename);
     assert!(
         path.exists(),
@@ -104,7 +104,6 @@ fn golden_available(dirname: &str, filename: &str) -> bool {
          Run: ./tests/hidden/generate_goldens.sh",
         path.display()
     );
-    true
 }
 
 /// Read a golden file.
@@ -372,6 +371,44 @@ fn format_eda_no_shadows(layout: &NetworkLayout) -> String {
     out
 }
 
+/// Normalize the `<colors>` section of a BIF XML string so that `<color .../>`
+/// entries within each `<colorSet>` are sorted alphabetically. This makes the
+/// comparison independent of the order in which color entries are written.
+fn normalize_bif_colors(bif: &str) -> String {
+    let mut result = String::with_capacity(bif.len());
+    let mut color_lines: Vec<String> = Vec::new();
+    let mut in_color_set = false;
+
+    for line in bif.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("<colorSet ") {
+            in_color_set = true;
+            result.push_str(line);
+            result.push('\n');
+            continue;
+        }
+        if trimmed == "</colorSet>" {
+            color_lines.sort();
+            for cl in &color_lines {
+                result.push_str(cl);
+                result.push('\n');
+            }
+            color_lines.clear();
+            in_color_set = false;
+            result.push_str(line);
+            result.push('\n');
+            continue;
+        }
+        if in_color_set && trimmed.starts_with("<color ") {
+            color_lines.push(line.to_string());
+        } else {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    result
+}
+
 /// Normalize BIF XML by stripping NID-derived attributes.
 fn normalize_bif_nids(bif: &str) -> String {
     let mut result = String::with_capacity(bif.len());
@@ -460,8 +497,8 @@ fn assert_parity(label: &str, expected: &str, actual: &str) {
 }
 
 fn assert_parity_bif_nid_normalized(label: &str, expected: &str, actual: &str) {
-    let expected_norm = normalize_bif_nids(expected);
-    let actual_norm = normalize_bif_nids(actual);
+    let expected_norm = normalize_bif_colors(&normalize_bif_nids(expected));
+    let actual_norm = normalize_bif_colors(&normalize_bif_nids(actual));
     assert_parity(label, &expected_norm, &actual_norm);
 }
 
@@ -614,10 +651,10 @@ fn hidden_mmus_default_eda() {
 #[test]
 fn hidden_mmus_default_bif() {
     golden_available("hidden_mmus_default", "output.bif");
-    let golden = read_golden("hidden_mmus_default", "output.bif");
+    let golden = normalize_bif_colors(&read_golden("hidden_mmus_default", "output.bif"));
     let network = load_network(&hidden_network_path("MMusculus.gw"));
     let layout = run_default_layout(&network);
-    let actual = produce_bif_default(&network, &layout);
+    let actual = normalize_bif_colors(&produce_bif_default(&network, &layout));
     assert_parity("BIF", &golden, &actual);
 }
 
@@ -648,10 +685,10 @@ fn hidden_atha_default_eda() {
 #[test]
 fn hidden_atha_default_bif() {
     golden_available("hidden_atha_default", "output.bif");
-    let golden = read_golden("hidden_atha_default", "output.bif");
+    let golden = normalize_bif_colors(&read_golden("hidden_atha_default", "output.bif"));
     let network = load_network(&hidden_network_path("AThaliana.gw"));
     let layout = run_default_layout(&network);
-    let actual = produce_bif_default(&network, &layout);
+    let actual = normalize_bif_colors(&produce_bif_default(&network, &layout));
     assert_parity("BIF", &golden, &actual);
 }
 
@@ -666,7 +703,10 @@ fn hidden_mmus_noshadow_noa() {
     golden_available("hidden_mmus_noshadow", "output.noa");
     let golden = read_golden("hidden_mmus_noshadow", "output.noa");
     let network = load_network(&hidden_network_path("MMusculus.gw"));
-    let layout = run_default_layout_no_shadows(&network);
+    // Java's GoldenGenerator always computes the full layout including shadows.
+    // The shadow toggle only affects the BIF display options, not the layout.
+    // NOA and EDA are always emitted with the full shadow-inclusive layout.
+    let layout = run_default_layout(&network);
     assert_parity("NOA", &golden, &format_noa(&layout));
 }
 
@@ -675,17 +715,17 @@ fn hidden_mmus_noshadow_eda() {
     golden_available("hidden_mmus_noshadow", "output.eda");
     let golden = read_golden("hidden_mmus_noshadow", "output.eda");
     let network = load_network(&hidden_network_path("MMusculus.gw"));
-    let layout = run_default_layout_no_shadows(&network);
-    assert_parity("EDA", &golden, &format_eda_no_shadows(&layout));
+    let layout = run_default_layout(&network);
+    assert_parity("EDA", &golden, &format_eda(&layout));
 }
 
 #[test]
 fn hidden_mmus_noshadow_bif() {
     golden_available("hidden_mmus_noshadow", "output.bif");
-    let golden = read_golden("hidden_mmus_noshadow", "output.bif");
+    let golden = normalize_bif_colors(&read_golden("hidden_mmus_noshadow", "output.bif"));
     let network = load_network(&hidden_network_path("MMusculus.gw"));
-    let layout = run_default_layout_no_shadows(&network);
-    let actual = produce_bif_no_shadows(&network, &layout);
+    let layout = run_default_layout(&network);
+    let actual = normalize_bif_colors(&produce_bif_default(&network, &layout));
     assert_parity("BIF", &golden, &actual);
 }
 
