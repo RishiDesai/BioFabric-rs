@@ -1981,25 +1981,3 @@ pub fn run_bif_test_unordered(cfg: &ParityConfig) {
     let actual_norm = normalize_bif_nids(&actual_bif);
     assert_parity_bif_sections_unordered("BIF", &expected_norm, &actual_norm);
 }
-
-/// Comparison mode for BIF parity tests.
-#[derive(Clone, Copy, PartialEq)]
-#[allow(dead_code)]
-pub enum BifCompareMode {
-    /// Exact byte-for-byte comparison (default).
-    Exact,
-    /// Strips nid="..." before comparing. Used for alignment BIF where Java
-    /// HashMap iteration order makes NIDs nondeterministic.
-    NidNormalized,
-    /// Compares <nodes> and <links> sections as unordered sets, with NID
-    /// normalization. Used for cycle layout where HashSet controls node order.
-    Unordered,
-}
-
-/// Comparison mode for NOA/EDA parity tests.
-#[derive(Clone, Copy, PartialEq)]
-#[allow(dead_code)]
-pub enum TextCompareMode {
-    Exact,
-    Unordered,
-}
