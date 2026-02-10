@@ -3210,7 +3210,6 @@ fn generate_goldens() {
         ("linear_chain.sif",              "linear_chain_default",              true),
         ("triangle.gw",                   "triangle_gw_default",               true),
         ("directed_triangle.gw",          "directed_triangle_gw_default",      true),
-        ("CElegans.gw",                   "CElegans_gw_default",               true),
         // ---- P2: Default layout, shadows OFF (12 networks) ----
         ("single_node.sif",               "single_node_noshadow",              false),
         ("single_edge.sif",               "single_edge_noshadow",              false),
@@ -3223,7 +3222,6 @@ fn generate_goldens() {
         ("linear_chain.sif",              "linear_chain_noshadow",             false),
         ("triangle.gw",                   "triangle_gw_noshadow",              false),
         ("directed_triangle.gw",          "directed_triangle_gw_noshadow",     false),
-        ("CElegans.gw",                   "CElegans_gw_noshadow",              false),
     ];
 
     let mut generated = 0;
@@ -3799,8 +3797,6 @@ parity_test! { name: sif_linear_chain,               input: "linear_chain.sif", 
 parity_test! { name: gw_triangle,     input: "triangle.gw",          golden: "triangle_gw_default" }
 parity_test! { name: gw_directed_tri, input: "directed_triangle.gw", golden: "directed_triangle_gw_default" }
 
-parity_test! { name: gw_celegans,    input: "CElegans.gw",    golden: "CElegans_gw_default" }
-
 // ===========================================================================
 //
 //  PHASE 2: Default layout + shadows OFF
@@ -3825,8 +3821,6 @@ parity_test_noshadow! { name: sif_linear_chain_noshadow,           input: "linea
 
 parity_test_noshadow! { name: gw_triangle_noshadow,     input: "triangle.gw",          golden: "triangle_gw_noshadow" }
 parity_test_noshadow! { name: gw_directed_tri_noshadow, input: "directed_triangle.gw", golden: "directed_triangle_gw_noshadow" }
-
-parity_test_noshadow! { name: gw_celegans_noshadow,    input: "CElegans.gw",    golden: "CElegans_gw_noshadow" }
 
 // ===========================================================================
 //

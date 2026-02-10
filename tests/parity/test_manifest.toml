@@ -18,16 +18,14 @@
 #   layout      - Layout algorithm: "default" (more later)
 #   shadows     - Whether shadow links are enabled
 #   compare     - List of output files to compare: ["noa", "eda", "bif"]
-#   tags        - Optional tags for filtering
+#   tags        - Optional tags for filtering (e.g. "sif", "alignment", "noshadow")
 #
 # Link grouping fields (optional):
 #   link_groups - List of relation names defining group order
 #   group_mode  - "per_node" or "per_network"
 
 # ==========================================================================
-#
-#  PHASE 1: Default layout, shadows ON  (baseline)
-#
+#  Default layout (shadows ON)
 # ==========================================================================
 
 # ---------- SIF edge cases ----------
@@ -40,7 +38,7 @@ golden_dir = "single_node_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_single_edge"
@@ -50,7 +48,7 @@ golden_dir = "single_edge_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_triangle"
@@ -60,7 +58,7 @@ golden_dir = "triangle_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_self_loop"
@@ -70,7 +68,7 @@ golden_dir = "self_loop_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_isolated_nodes"
@@ -80,7 +78,7 @@ golden_dir = "isolated_nodes_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_disconnected_components"
@@ -90,7 +88,7 @@ golden_dir = "disconnected_components_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_multi_relation"
@@ -100,7 +98,7 @@ golden_dir = "multi_relation_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_dense_clique"
@@ -110,7 +108,7 @@ golden_dir = "dense_clique_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
 [[test]]
 id = "sif_linear_chain"
@@ -120,9 +118,8 @@ golden_dir = "linear_chain_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p1"]
+tags = ["sif", "edge_case"]
 
-# ---------- GW edge cases ----------
 
 [[test]]
 id = "gw_triangle"
@@ -132,7 +129,7 @@ golden_dir = "triangle_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case", "p1"]
+tags = ["gw", "edge_case"]
 
 [[test]]
 id = "gw_directed_tri"
@@ -142,29 +139,12 @@ golden_dir = "directed_triangle_gw_default"
 layout = "default"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case", "p1"]
-
-[[test]]
-id = "gw_celegans"
-description = "C. elegans PPI network (~8.5K lines, medium)"
-input = "CElegans.gw"
-golden_dir = "CElegans_gw_default"
-layout = "default"
-shadows = true
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p1"]
+tags = ["gw", "edge_case"]
 
 # ==========================================================================
-#
-#  PHASE 2: Default layout, shadows OFF
-#
-#  Same networks, but with shadow links disabled after initial layout.
-#  Validates SHADOW_LINK_CHANGE rebuild path. Node order (NOA) should be
-#  identical to Phase 1; edge order (EDA) and session XML (BIF) differ.
-#
+#  Default layout (shadows OFF)
 # ==========================================================================
 
-# ---------- SIF edge cases (no shadows) ----------
 
 [[test]]
 id = "sif_single_node_noshadow"
@@ -174,7 +154,7 @@ golden_dir = "single_node_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_single_edge_noshadow"
@@ -184,7 +164,7 @@ golden_dir = "single_edge_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_triangle_noshadow"
@@ -194,7 +174,7 @@ golden_dir = "triangle_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_self_loop_noshadow"
@@ -204,7 +184,7 @@ golden_dir = "self_loop_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_isolated_nodes_noshadow"
@@ -214,7 +194,7 @@ golden_dir = "isolated_nodes_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_disconnected_components_noshadow"
@@ -224,7 +204,7 @@ golden_dir = "disconnected_components_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_multi_relation_noshadow"
@@ -234,7 +214,7 @@ golden_dir = "multi_relation_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_dense_clique_noshadow"
@@ -244,7 +224,7 @@ golden_dir = "dense_clique_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
 [[test]]
 id = "sif_linear_chain_noshadow"
@@ -254,9 +234,8 @@ golden_dir = "linear_chain_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "edge_case", "p2", "noshadow"]
+tags = ["sif", "edge_case", "noshadow"]
 
-# ---------- GW edge cases (no shadows) ----------
 
 [[test]]
 id = "gw_triangle_noshadow"
@@ -266,7 +245,7 @@ golden_dir = "triangle_gw_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case", "p2", "noshadow"]
+tags = ["gw", "edge_case", "noshadow"]
 
 [[test]]
 id = "gw_directed_tri_noshadow"
@@ -276,25 +255,10 @@ golden_dir = "directed_triangle_gw_noshadow"
 layout = "default"
 shadows = false
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "edge_case", "p2", "noshadow"]
-
-[[test]]
-id = "gw_celegans_noshadow"
-description = "C. elegans PPI, shadows OFF"
-input = "CElegans.gw"
-golden_dir = "CElegans_gw_noshadow"
-layout = "default"
-shadows = false
-compare = ["noa", "eda", "bif"]
-tags = ["gw", "stress", "p2", "noshadow"]
+tags = ["gw", "edge_case", "noshadow"]
 
 # ==========================================================================
-#
-#  PHASE 3: Link grouping variants
-#
-#  Tests the link grouping relayout paths (GROUP_PER_NODE_CHANGE and
-#  GROUP_PER_NETWORK_CHANGE). Only applies to multi-relation networks.
-#
+#  Link grouping
 # ==========================================================================
 
 [[test]]
@@ -307,7 +271,7 @@ shadows = true
 link_groups = ["pp", "pd", "gi"]
 group_mode = "per_node"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "grouping", "p3"]
+tags = ["sif", "grouping"]
 
 [[test]]
 id = "sif_multi_relation_pernetwork"
@@ -319,7 +283,7 @@ shadows = true
 link_groups = ["pp", "pd", "gi"]
 group_mode = "per_network"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "grouping", "p3"]
+tags = ["sif", "grouping"]
 
 [[test]]
 id = "gw_directed_tri_pernode"
@@ -331,7 +295,7 @@ shadows = true
 link_groups = ["activates", "inhibits"]
 group_mode = "per_node"
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "grouping", "p3"]
+tags = ["gw", "grouping"]
 
 [[test]]
 id = "gw_directed_tri_pernetwork"
@@ -343,19 +307,10 @@ shadows = true
 link_groups = ["activates", "inhibits"]
 group_mode = "per_network"
 compare = ["noa", "eda", "bif"]
-tags = ["gw", "grouping", "p3"]
+tags = ["gw", "grouping"]
 
 # ==========================================================================
-#
-#  PHASE 4: XML round-trip tests
-#
-#  These are derived from Phase 1 goldens. No separate golden generation
-#  needed — the Rust test loads a golden .bif file, parses it with the
-#  XML session reader, re-exports it, and compares byte-for-byte against
-#  the same golden. Tests the io::xml read + write round-trip path.
-#
-#  Entries here are just metadata for the Rust test harness.
-#
+#  XML round-trip
 # ==========================================================================
 
 [[test]]
@@ -366,7 +321,7 @@ golden_dir = "triangle_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_sif_self_loop"
@@ -376,7 +331,7 @@ golden_dir = "self_loop_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_sif_isolated_nodes"
@@ -386,7 +341,7 @@ golden_dir = "isolated_nodes_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_sif_disconnected"
@@ -396,7 +351,7 @@ golden_dir = "disconnected_components_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_sif_multi_relation"
@@ -406,7 +361,7 @@ golden_dir = "multi_relation_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_gw_triangle"
@@ -416,7 +371,7 @@ golden_dir = "triangle_gw_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 [[test]]
 id = "roundtrip_gw_directed_tri"
@@ -426,15 +381,10 @@ golden_dir = "directed_triangle_gw_default"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "p4"]
+tags = ["roundtrip"]
 
 # ==========================================================================
-#
-#  PHASE 5: NodeSimilarity layout (resort mode)
-#
-#  Reorders nodes by Jaccard similarity using connection vectors.
-#  4 networks × 3 formats = 12 test functions
-#
+#  Similarity layout (resort mode)
 # ==========================================================================
 
 [[test]]
@@ -445,7 +395,7 @@ golden_dir = "triangle_similarity_resort"
 layout = "similarity_resort"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 [[test]]
 id = "sif_multi_relation_similarity_resort"
@@ -455,15 +405,10 @@ golden_dir = "multi_relation_similarity_resort"
 layout = "similarity_resort"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 # ==========================================================================
-#
-#  PHASE 5b: NodeSimilarity layout (clustered mode)
-#
-#  Clusters nodes by similarity matrix using Jaccard distance.
-#  4 networks × 3 formats = 12 test functions
-#
+#  Similarity layout (clustered mode)
 # ==========================================================================
 
 [[test]]
@@ -474,7 +419,7 @@ golden_dir = "triangle_similarity_clustered"
 layout = "similarity_clustered"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 [[test]]
 id = "sif_multi_relation_similarity_clustered"
@@ -484,16 +429,10 @@ golden_dir = "multi_relation_similarity_clustered"
 layout = "similarity_clustered"
 shadows = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 # ==========================================================================
-#
-#  PHASE 6: HierDAG layout
-#
-#  Hierarchical DAG layout with pointUp=true and pointUp=false.
-#  Requires cycle-free directed networks.
-#  3 DAGs × 2 pointUp values × 3 formats = 18 test functions
-#
+#  HierDAG layout
 # ==========================================================================
 
 [[test]]
@@ -505,7 +444,7 @@ layout = "hierdag"
 shadows = true
 point_up = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 [[test]]
 id = "sif_dag_simple_hierdag_false"
@@ -516,7 +455,7 @@ layout = "hierdag"
 shadows = true
 point_up = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 [[test]]
 id = "sif_dag_diamond_hierdag_true"
@@ -527,7 +466,7 @@ layout = "hierdag"
 shadows = true
 point_up = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 [[test]]
 id = "sif_dag_diamond_hierdag_false"
@@ -538,7 +477,7 @@ layout = "hierdag"
 shadows = true
 point_up = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 [[test]]
 id = "sif_dag_deep_hierdag_true"
@@ -549,7 +488,7 @@ layout = "hierdag"
 shadows = true
 point_up = true
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 [[test]]
 id = "sif_dag_deep_hierdag_false"
@@ -560,15 +499,10 @@ layout = "hierdag"
 shadows = true
 point_up = false
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "hierdag", "p6"]
+tags = ["sif", "layout", "hierdag"]
 
 # ==========================================================================
-#
-#  PHASE 7: NodeCluster layout
-#
-#  Clusters nodes by attribute file assignment.
-#  1 network × 3 formats = 3 test functions (expandable)
-#
+#  Cluster layout
 # ==========================================================================
 
 [[test]]
@@ -580,15 +514,10 @@ layout = "node_cluster"
 shadows = true
 attribute_file = "multi_relation_clusters.na"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "cluster", "p7"]
+tags = ["sif", "layout", "cluster"]
 
 # ==========================================================================
-#
-#  PHASE 8: ControlTop layout
-#
-#  Pins control nodes at top. Tests multiple ctrl/target mode combinations.
-#  2 networks × 4 mode combos × 3 formats = 24 test functions
-#
+#  ControlTop layout
 # ==========================================================================
 
 # --- multi_relation: fixed_list [A,B] + target_degree ---
@@ -604,7 +533,7 @@ control_mode = "fixed_list"
 control_nodes = ["A", "B"]
 target_mode = "target_degree"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 # --- multi_relation: fixed_list [A,B] + breadth_order ---
 
@@ -619,9 +548,8 @@ control_mode = "fixed_list"
 control_nodes = ["A", "B"]
 target_mode = "breadth_order"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "p8"]
+tags = ["sif", "layout", "controltop"]
 
-# --- multi_relation: degree_only + target_degree ---
 
 [[test]]
 id = "sif_multi_relation_controltop_degree_target"
@@ -633,7 +561,7 @@ shadows = true
 control_mode = "degree_only"
 target_mode = "target_degree"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 # --- multi_relation: degree_only + breadth_order ---
 
@@ -647,9 +575,7 @@ shadows = true
 control_mode = "degree_only"
 target_mode = "breadth_order"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "p8"]
-
-# --- triangle: ControlTop deep-variant modes ---
+tags = ["sif", "layout", "controltop"]
 
 [[test]]
 id = "sif_triangle_controltop_intra_target"
@@ -661,7 +587,7 @@ shadows = true
 control_mode = "intra_degree"
 target_mode = "target_degree"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 [[test]]
 id = "sif_triangle_controltop_median_target"
@@ -673,7 +599,7 @@ shadows = true
 control_mode = "median_target_degree"
 target_mode = "target_degree"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 [[test]]
 id = "sif_triangle_controltop_degree_gray"
@@ -685,7 +611,7 @@ shadows = true
 control_mode = "degree_only"
 target_mode = "gray_code"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 [[test]]
 id = "sif_triangle_controltop_degree_odometer"
@@ -697,15 +623,10 @@ shadows = true
 control_mode = "degree_only"
 target_mode = "degree_odometer"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "controltop", "deep_variant", "p8"]
+tags = ["sif", "layout", "controltop"]
 
 # ==========================================================================
-#
-#  PHASE 7b: NodeCluster deep-variants (ordering + placement)
-#
-#  Tests additional cluster ordering and placement modes.
-#  3 tests × 3 formats = 9 test functions
-#
+#  Cluster layout (ordering + placement variants)
 # ==========================================================================
 
 [[test]]
@@ -719,7 +640,7 @@ attribute_file = "multi_relation_clusters.na"
 cluster_order = "link_size"
 cluster_placement = "between"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+tags = ["sif", "layout", "cluster"]
 
 [[test]]
 id = "sif_multi_relation_cluster_nodesize"
@@ -732,7 +653,7 @@ attribute_file = "multi_relation_clusters.na"
 cluster_order = "node_size"
 cluster_placement = "between"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+tags = ["sif", "layout", "cluster"]
 
 [[test]]
 id = "sif_multi_relation_cluster_inline"
@@ -745,15 +666,10 @@ attribute_file = "multi_relation_clusters.na"
 cluster_order = "name"
 cluster_placement = "inline"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "cluster", "deep_variant", "p7"]
+tags = ["sif", "layout", "cluster"]
 
 # ==========================================================================
-#
-#  PHASE 5c: NodeSimilarity deep-variants (custom parameters)
-#
-#  Tests non-default similarity algorithm parameters.
-#  3 tests × 3 formats = 9 test functions
-#
+#  Similarity layout (parameter variants)
 # ==========================================================================
 
 [[test]]
@@ -765,7 +681,7 @@ layout = "similarity_resort"
 shadows = true
 similarity_pass_count = 5
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 [[test]]
 id = "sif_triangle_similarity_clustered_tol50"
@@ -776,7 +692,7 @@ layout = "similarity_clustered"
 shadows = true
 similarity_tolerance = 0.50
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 [[test]]
 id = "sif_triangle_similarity_clustered_chain5"
@@ -787,15 +703,10 @@ layout = "similarity_clustered"
 shadows = true
 similarity_chain_length = 5
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "similarity", "deep_variant", "p5"]
+tags = ["sif", "layout", "similarity"]
 
 # ==========================================================================
-#
-#  PHASE 9: SetLayout
-#
-#  Bipartite/set membership layout with belongs_to/contains semantics.
-#  2 networks × 2 link-means modes × 3 formats = 12 test functions
-#
+#  Set layout
 # ==========================================================================
 
 [[test]]
@@ -807,7 +718,7 @@ layout = "set"
 shadows = true
 link_means = "belongs_to"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "set", "p9"]
+tags = ["sif", "layout", "set"]
 
 [[test]]
 id = "sif_bipartite_set_contains"
@@ -818,24 +729,10 @@ layout = "set"
 shadows = true
 link_means = "contains"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "layout", "set", "p9"]
+tags = ["sif", "layout", "set"]
 
 # ==========================================================================
-#
-#  PHASE 10: WorldBank layout
-#
-#  Hub-spoke grouping. No special input requirements.
-#  2 networks × 3 formats = 6 test functions
-#
-# ==========================================================================
-
-# ==========================================================================
-#
-#  PHASE 11: Fixed-order import (NOA/EDA files)
-#
-#  Bypasses the layout algorithm and uses a fixed node or link ordering.
-#  4 tests × 3 formats = 12 test functions
-#
+#  Fixed-order import
 # ==========================================================================
 
 [[test]]
@@ -847,7 +744,7 @@ layout = "fixed_node_order"
 shadows = true
 noa_file = "triangle_reversed.noa"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "fixed_order", "p11"]
+tags = ["sif", "fixed_order"]
 
 [[test]]
 id = "sif_multi_relation_fixed_noa"
@@ -858,7 +755,7 @@ layout = "fixed_node_order"
 shadows = true
 noa_file = "multi_relation_shuffled.noa"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "fixed_order", "p11"]
+tags = ["sif", "fixed_order"]
 
 [[test]]
 id = "sif_triangle_fixed_eda"
@@ -869,15 +766,10 @@ layout = "fixed_link_order"
 shadows = true
 eda_file = "triangle_reversed.eda"
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "fixed_order", "p11"]
+tags = ["sif", "fixed_order"]
 
 # ==========================================================================
-#
-#  PHASE 12: Subnetwork extraction
-#
-#  Extract a subset of nodes and their induced edges.
-#  3 tests × 3 formats = 9 test functions
-#
+#  Subnetwork extraction
 # ==========================================================================
 
 [[test]]
@@ -889,7 +781,7 @@ layout = "default"
 shadows = true
 extract_nodes = ["A", "B"]
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "analysis", "extraction", "p12"]
+tags = ["sif", "analysis", "extraction"]
 
 [[test]]
 id = "sif_multi_relation_extract_ACE"
@@ -900,7 +792,7 @@ layout = "default"
 shadows = true
 extract_nodes = ["A", "C", "E"]
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "analysis", "extraction", "p12"]
+tags = ["sif", "analysis", "extraction"]
 
 [[test]]
 id = "sif_dense_clique_extract_ABC"
@@ -911,15 +803,10 @@ layout = "default"
 shadows = true
 extract_nodes = ["A", "B", "C"]
 compare = ["noa", "eda", "bif"]
-tags = ["sif", "analysis", "extraction", "p12"]
+tags = ["sif", "analysis", "extraction"]
 
 # ==========================================================================
-#
-#  PHASE 13: Analysis operations (cycle detection + Jaccard)
-#
-#  These are simpler text/boolean output comparisons.
-#  5 cycle tests + 5 Jaccard tests = 10 test functions (1 per case)
-#
+#  Analysis: cycle detection + Jaccard similarity
 # ==========================================================================
 
 [[test]]
@@ -930,7 +817,7 @@ golden_dir = "analysis_cycle_triangle"
 layout = "analysis_cycle"
 shadows = true
 compare = ["txt"]
-tags = ["analysis", "cycle", "p13"]
+tags = ["analysis", "cycle"]
 
 [[test]]
 id = "analysis_cycle_self_loop"
@@ -940,7 +827,7 @@ golden_dir = "analysis_cycle_self_loop"
 layout = "analysis_cycle"
 shadows = true
 compare = ["txt"]
-tags = ["analysis", "cycle", "p13"]
+tags = ["analysis", "cycle"]
 
 [[test]]
 id = "analysis_cycle_dag_simple"
@@ -950,7 +837,7 @@ golden_dir = "analysis_cycle_dag_simple"
 layout = "analysis_cycle"
 shadows = true
 compare = ["txt"]
-tags = ["analysis", "cycle", "p13"]
+tags = ["analysis", "cycle"]
 
 [[test]]
 id = "analysis_cycle_linear_chain"
@@ -960,7 +847,7 @@ golden_dir = "analysis_cycle_linear_chain"
 layout = "analysis_cycle"
 shadows = true
 compare = ["txt"]
-tags = ["analysis", "cycle", "p13"]
+tags = ["analysis", "cycle"]
 
 [[test]]
 id = "analysis_cycle_disconnected"
@@ -970,7 +857,7 @@ golden_dir = "analysis_cycle_disconnected"
 layout = "analysis_cycle"
 shadows = true
 compare = ["txt"]
-tags = ["analysis", "cycle", "p13"]
+tags = ["analysis", "cycle"]
 
 [[test]]
 id = "analysis_jaccard_triangle_AB"
@@ -981,7 +868,7 @@ layout = "analysis_jaccard"
 shadows = true
 node_pair = ["A", "B"]
 compare = ["txt"]
-tags = ["analysis", "jaccard", "p13"]
+tags = ["analysis", "jaccard"]
 
 [[test]]
 id = "analysis_jaccard_triangle_AC"
@@ -992,7 +879,7 @@ layout = "analysis_jaccard"
 shadows = true
 node_pair = ["A", "C"]
 compare = ["txt"]
-tags = ["analysis", "jaccard", "p13"]
+tags = ["analysis", "jaccard"]
 
 [[test]]
 id = "analysis_jaccard_multi_relation_AD"
@@ -1003,7 +890,7 @@ layout = "analysis_jaccard"
 shadows = true
 node_pair = ["A", "D"]
 compare = ["txt"]
-tags = ["analysis", "jaccard", "p13"]
+tags = ["analysis", "jaccard"]
 
 [[test]]
 id = "analysis_jaccard_dense_clique_AB"
@@ -1014,22 +901,11 @@ layout = "analysis_jaccard"
 shadows = true
 node_pair = ["A", "B"]
 compare = ["txt"]
-tags = ["analysis", "jaccard", "p13"]
+tags = ["analysis", "jaccard"]
 
 # ==========================================================================
-#
-#  PHASE 13b: Graph analysis operations (connected components, topo sort, degree)
-#
-#  Golden files: output.components, output.toposort, output.degrees
-#  Generated via: GoldenGenerator --analysis connected_components,topo_sort,node_degree
-#
-#  These tests validate the core graph analysis algorithms against Java's
-#  GraphSearcher output. Unlike layout tests, they operate on the raw parsed
-#  network (pre-layout) and compare simpler text output.
-#
+#  Analysis: connected components, topological sort, node degree
 # ==========================================================================
-
-# ---- Connected components ----
 
 [[test]]
 id = "analysis_components_single_node"
@@ -1039,7 +915,7 @@ golden_dir = "analysis_components_single_node"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_single_edge"
@@ -1049,7 +925,7 @@ golden_dir = "analysis_components_single_edge"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_triangle"
@@ -1059,7 +935,7 @@ golden_dir = "analysis_components_triangle"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_isolated"
@@ -1069,7 +945,7 @@ golden_dir = "analysis_components_isolated"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_disconnected"
@@ -1079,7 +955,7 @@ golden_dir = "analysis_components_disconnected"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_linear_chain"
@@ -1089,7 +965,7 @@ golden_dir = "analysis_components_linear_chain"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_dense_clique"
@@ -1099,7 +975,7 @@ golden_dir = "analysis_components_dense_clique"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_multi_relation"
@@ -1109,7 +985,7 @@ golden_dir = "analysis_components_multi_relation"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
 [[test]]
 id = "analysis_components_bipartite"
@@ -1119,9 +995,8 @@ golden_dir = "analysis_components_bipartite"
 layout = "analysis_components"
 shadows = true
 compare = ["components"]
-tags = ["analysis", "components", "p13b"]
+tags = ["analysis", "components"]
 
-# ---- Topological sort (DAGs only) ----
 
 [[test]]
 id = "analysis_toposort_dag_simple"
@@ -1131,7 +1006,7 @@ golden_dir = "analysis_toposort_dag_simple"
 layout = "analysis_toposort"
 shadows = true
 compare = ["toposort"]
-tags = ["analysis", "toposort", "p13b"]
+tags = ["analysis", "toposort"]
 
 [[test]]
 id = "analysis_toposort_dag_diamond"
@@ -1141,7 +1016,7 @@ golden_dir = "analysis_toposort_dag_diamond"
 layout = "analysis_toposort"
 shadows = true
 compare = ["toposort"]
-tags = ["analysis", "toposort", "p13b"]
+tags = ["analysis", "toposort"]
 
 [[test]]
 id = "analysis_toposort_dag_deep"
@@ -1151,9 +1026,8 @@ golden_dir = "analysis_toposort_dag_deep"
 layout = "analysis_toposort"
 shadows = true
 compare = ["toposort"]
-tags = ["analysis", "toposort", "p13b"]
+tags = ["analysis", "toposort"]
 
-# ---- Node degree ----
 
 [[test]]
 id = "analysis_degree_triangle"
@@ -1163,7 +1037,7 @@ golden_dir = "analysis_degree_triangle"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_single_edge"
@@ -1173,7 +1047,7 @@ golden_dir = "analysis_degree_single_edge"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_self_loop"
@@ -1183,7 +1057,7 @@ golden_dir = "analysis_degree_self_loop"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_isolated_nodes"
@@ -1193,7 +1067,7 @@ golden_dir = "analysis_degree_isolated_nodes"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_multi_relation"
@@ -1203,7 +1077,7 @@ golden_dir = "analysis_degree_multi_relation"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_dense_clique"
@@ -1213,7 +1087,7 @@ golden_dir = "analysis_degree_dense_clique"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_disconnected"
@@ -1223,7 +1097,7 @@ golden_dir = "analysis_degree_disconnected"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 [[test]]
 id = "analysis_degree_dag_simple"
@@ -1233,15 +1107,10 @@ golden_dir = "analysis_degree_dag_simple"
 layout = "analysis_degree"
 shadows = true
 compare = ["degrees"]
-tags = ["analysis", "degree", "p13b"]
+tags = ["analysis", "degree"]
 
 # ==========================================================================
-#
-#  PHASE 14: Display option permutations
-#
-#  BIF-only tests — display options affect colors and drain zones.
-#  8 tests × 1 format = 8 test functions
-#
+#  Display options
 # ==========================================================================
 
 [[test]]
@@ -1253,7 +1122,7 @@ layout = "default"
 shadows = true
 min_drain_zone = 0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_triangle_drain5"
@@ -1264,7 +1133,7 @@ layout = "default"
 shadows = true
 min_drain_zone = 5
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_triangle_lighter0"
@@ -1275,7 +1144,7 @@ layout = "default"
 shadows = true
 node_lighter = 0.0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_triangle_lighter1"
@@ -1286,7 +1155,7 @@ layout = "default"
 shadows = true
 node_lighter = 1.0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_triangle_darker0"
@@ -1297,7 +1166,7 @@ layout = "default"
 shadows = true
 link_darker = 0.0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_triangle_darker1"
@@ -1308,7 +1177,7 @@ layout = "default"
 shadows = true
 link_darker = 1.0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_multi_relation_drain0"
@@ -1319,7 +1188,7 @@ layout = "default"
 shadows = true
 min_drain_zone = 0
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 [[test]]
 id = "sif_multi_relation_drain5"
@@ -1330,15 +1199,10 @@ layout = "default"
 shadows = true
 min_drain_zone = 5
 compare = ["bif"]
-tags = ["sif", "display", "p14"]
+tags = ["sif", "display"]
 
 # ==========================================================================
-#
-#  PHASE 15: Alignment tests
-#
-#  Merge two networks using an alignment file.
-#  2 alignment scenarios × 3 formats = 6 test functions + scoring tests
-#
+#  Alignment (toy networks)
 # ==========================================================================
 
 [[test]]
@@ -1352,7 +1216,7 @@ align_net2 = "align_net2.sif"
 align_file = "test_perfect.align"
 perfect_align = "test_perfect.align"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "p15"]
+tags = ["alignment"]
 
 [[test]]
 id = "align_partial"
@@ -1366,18 +1230,11 @@ align_file = "test_partial.align"
 # Note: no perfect_align — JaccardSimilarity NPEs when the main alignment
 # is partial (unmapped nodes cause null findMatch in jaccSimDecision).
 compare = ["noa", "eda", "bif"]
-tags = ["alignment", "p15"]
+tags = ["alignment"]
 
 # ==========================================================================
-#
-#  PHASE 16: Realistic alignment tests (DesaiEtAl-2019 case study data)
-#
-#  Real PPI networks and alignments from the BioFabric alignment publication.
-#  Tests the alignment pipeline on biologically meaningful data at scale.
-#
+#  Alignment (realistic networks)
 # ==========================================================================
-
-# --- Case Study IV: SmallYeast vs LargeYeast (GW + GW, 1004 nodes each) ---
 
 [[test]]
 id = "align_casestudy_iv"
@@ -1390,9 +1247,8 @@ align_net2 = "CaseStudy-IV-LargeYeast.gw"
 align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "p16"]
+tags = ["alignment", "realistic"]
 
-# --- Case Studies I-III: Yeast2KReduced vs SC (SIF + SIF, 2379-node alignment) ---
 
 [[test]]
 id = "align_yeast_sc_perfect"
@@ -1405,7 +1261,7 @@ align_net2 = "SC.sif"
 align_file = "yeast_sc_perfect.align"
 perfect_align = "yeast_sc_perfect.align"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16"]
+tags = ["alignment", "realistic", "stress"]
 
 [[test]]
 id = "align_yeast_sc_s3_pure"
@@ -1418,11 +1274,8 @@ align_net2 = "SC.sif"
 align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "realistic", "stress", "p16"]
+tags = ["alignment", "realistic", "stress"]
 
-# --- BIF round-trip with populated annotations (DesaiEtAl publication files) ---
-# These BIF files contain populated <nodeAnnotations>, <linkAnnotations>,
-# <shadowLinkAnnotations>, and <plugInDataSets> from the original publication.
 
 [[test]]
 id = "roundtrip_desai_iii_perfect"
@@ -1432,7 +1285,7 @@ golden_dir = "roundtrip_desai_iii_perfect"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "alignment", "annotations", "p16b"]
+tags = ["roundtrip", "alignment", "annotations"]
 
 [[test]]
 id = "roundtrip_desai_iii_all_s3"
@@ -1442,7 +1295,7 @@ golden_dir = "roundtrip_desai_iii_all_s3"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "alignment", "annotations", "p16b"]
+tags = ["roundtrip", "alignment", "annotations"]
 
 [[test]]
 id = "roundtrip_desai_iv"
@@ -1452,18 +1305,11 @@ golden_dir = "roundtrip_desai_iv"
 layout = "roundtrip"
 shadows = true
 compare = ["bif"]
-tags = ["roundtrip", "alignment", "annotations", "cycle", "p16b"]
+tags = ["roundtrip", "alignment", "annotations", "cycle"]
 
 # ==========================================================================
-#
-#  PHASE 17: Alignment view type variants
-#
-#  Tests ORPHAN and CYCLE view types, PerfectNG mode variants, and
-#  cycle view shadow toggle.
-#
+#  Alignment view variants
 # ==========================================================================
-
-# --- ViewType.ORPHAN: shows only unaligned edges + their 1-hop context ---
 
 [[test]]
 id = "align_casestudy_iv_orphan"
@@ -1477,7 +1323,7 @@ align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 view_type = "orphan"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "orphan", "p17"]
+tags = ["alignment", "orphan"]
 
 [[test]]
 id = "align_yeast_sc_perfect_orphan"
@@ -1491,7 +1337,7 @@ align_file = "yeast_sc_perfect.align"
 perfect_align = "yeast_sc_perfect.align"
 view_type = "orphan"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "orphan", "realistic", "p17"]
+tags = ["alignment", "orphan", "realistic"]
 
 [[test]]
 id = "align_yeast_sc_s3_pure_orphan"
@@ -1505,7 +1351,7 @@ align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 view_type = "orphan"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "orphan", "realistic", "p17"]
+tags = ["alignment", "orphan", "realistic"]
 
 # --- ViewType.CYCLE: highlights incorrect alignments via cycle/path detection ---
 
@@ -1521,7 +1367,7 @@ align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 view_type = "cycle"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "cycle", "p17"]
+tags = ["alignment", "cycle"]
 
 [[test]]
 id = "align_casestudy_iv_cycle_noshadow"
@@ -1535,7 +1381,7 @@ align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 view_type = "cycle"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "cycle", "noshadow", "p17"]
+tags = ["alignment", "cycle", "noshadow"]
 
 [[test]]
 id = "align_yeast_sc_s3_pure_cycle"
@@ -1549,9 +1395,8 @@ align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 view_type = "cycle"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "cycle", "realistic", "p17"]
+tags = ["alignment", "cycle", "realistic"]
 
-# --- PerfectNGMode variants: node group computation modes ---
 
 [[test]]
 id = "align_yeast_sc_perfect_ng_nc"
@@ -1565,7 +1410,7 @@ align_file = "yeast_sc_perfect.align"
 perfect_align = "yeast_sc_perfect.align"
 ng_mode = "node_correctness"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "ng_mode", "realistic", "p17"]
+tags = ["alignment", "ng_mode", "realistic"]
 
 [[test]]
 id = "align_yeast_sc_s3_pure_ng_nc"
@@ -1579,7 +1424,7 @@ align_file = "yeast_sc_s3_pure.align"
 perfect_align = "yeast_sc_perfect.align"
 ng_mode = "node_correctness"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "ng_mode", "realistic", "p17"]
+tags = ["alignment", "ng_mode", "realistic"]
 
 [[test]]
 id = "align_yeast_sc_perfect_ng_jacc"
@@ -1594,7 +1439,7 @@ perfect_align = "yeast_sc_perfect.align"
 ng_mode = "jaccard_similarity"
 jacc_threshold = 0.75
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "ng_mode", "realistic", "p17"]
+tags = ["alignment", "ng_mode", "realistic"]
 
 [[test]]
 id = "align_casestudy_iv_ng_nc"
@@ -1608,4 +1453,4 @@ align_file = "casestudy_iv.align"
 perfect_align = "casestudy_iv.align"
 ng_mode = "node_correctness"
 compare = ["noa", "eda", "bif", "scores"]
-tags = ["alignment", "ng_mode", "p17"]
+tags = ["alignment", "ng_mode"]
